@@ -1,268 +1,230 @@
 #pragma once
+
 #include <string>
-#include <memory>
 #include <vector>
-#include <iostream>
+#include <memory>
+#include "../lexer/token.hpp"
 
-// Função auxiliar para indentação visual no terminal
-inline void indentar(int n) {
-    for (int i = 0; i < n; ++i) std::cout << "  ";
-}
+// Forward Declarations de nós base para permitir referências cruzadas
+class ASTNode;
+class ExpressionNode;
+class StatementNode;
+class FunctionNode;
 
-// Classe base abstrata para todos os nós
-struct ASTNode {
+// Enumerações auxiliares para representar tipos de dados e operadores
+enum class DataType {
+    Int,
+    Bool,
+    Char,
+    Double,
+    Void
+};
+
+enum class BinaryOp {
+    Add, Sub, Mul, Div, Mod,
+    LessThan, LessEqual, GreaterThan, GreaterEqual,
+    Equal, NotEqual,
+    LogicalAnd, LogicalOr
+};
+
+enum class UnaryOp {
+    LogicalNot,
+    Negate // Ex: -fator
+};
+
+enum class IncDecOp {
+    Increment, // ++
+    Decrement  // --
+};
+
+// =============================================================================
+// NÓ BASE ABSTRATO
+// =============================================================================
+class ASTNode {
+public:
     virtual ~ASTNode() = default;
-    virtual void imprimir(int indent = 0) const = 0;
 };
 
-// ==========================================
-// NÓS DE EXPRESSÃO
-// ==========================================
-struct ExprAST : public ASTNode {};
-using ExprPtr = std::unique_ptr<ExprAST>;   // apelido usado pelo parser
-
-struct LiteralExprAST : public ExprAST {
-    std::string valor;
-    explicit LiteralExprAST(std::string v) : valor(std::move(v)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "Literal(" << valor << ")\n";
-    }
+// =============================================================================
+// EXPRESSÕES (Nodes herdando de ExpressionNode)
+// =============================================================================
+class ExpressionNode : public ASTNode {
+public:
+    ~ExpressionNode() override = default;
 };
 
-struct VariableExprAST : public ExprAST {
+// Literais (Ex: 42, 3.14, 'a', true)
+class LiteralNode : public ExpressionNode {
+public:
+    DataType tipoLiteral;
+    std::string valor; // Mantido como string para que a semântica/codegen trate a conversão
+
+    LiteralNode(DataType tipo, std::string val) : tipoLiteral(tipo), valor(std::move(val)) {}
+};
+
+// Identificador (Variáveis)
+class IdentifierNode : public ExpressionNode {
+public:
     std::string nome;
-    explicit VariableExprAST(std::string n) : nome(std::move(n)) {}
 
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "Var(" << nome << ")\n";
-    }
+    explicit IdentifierNode(std::string nome) : nome(std::move(nome)) {}
 };
 
-struct BinaryExprAST : public ExprAST {
-    std::string op;
-    std::unique_ptr<ExprAST> esq;
-    std::unique_ptr<ExprAST> dir;
+// Operações Binárias (Aritméticas, Relacionais, Igualdade, Lógicas)
+class BinaryExprNode : public ExpressionNode {
+public:
+    BinaryOp op;
+    std::unique_ptr<ExpressionNode> esquerda;
+    std::unique_ptr<ExpressionNode> direita;
 
-    BinaryExprAST(std::string o, std::unique_ptr<ExprAST> e, std::unique_ptr<ExprAST> d)
-        : op(std::move(o)), esq(std::move(e)), dir(std::move(d)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "OpBinaria(" << op << "):\n";
-        if (esq) esq->imprimir(indent + 1);
-        if (dir) dir->imprimir(indent + 1);
-    }
+    BinaryExprNode(BinaryOp op, std::unique_ptr<ExpressionNode> esq, std::unique_ptr<ExpressionNode> dir)
+        : op(op), esquerda(std::move(esq)), direita(std::move(dir)) {}
 };
 
-struct UnaryExprAST : public ExprAST {
-    std::string op;
-    std::unique_ptr<ExprAST> operando;
+// Operações Unárias (Ex: !fator, -fator)
+class UnaryExprNode : public ExpressionNode {
+public:
+    UnaryOp op;
+    std::unique_ptr<ExpressionNode> fator;
 
-    UnaryExprAST(std::string o, std::unique_ptr<ExprAST> opnd)
-        : op(std::move(o)), operando(std::move(opnd)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "OpUnaria(" << op << "):\n";
-        if (operando) operando->imprimir(indent + 1);
-    }
+    UnaryExprNode(UnaryOp op, std::unique_ptr<ExpressionNode> fat)
+        : op(op), fator(std::move(fat)) {}
 };
 
-struct CallExprAST : public ExprAST {
-    std::string callee;
-    std::vector<std::unique_ptr<ExprAST>> args;
+// Incremento e Decremento (Ex: id++, id--)
+class IncDecExprNode : public ExpressionNode {
+public:
+    std::string identificador;
+    IncDecOp op;
 
-    CallExprAST(std::string c, std::vector<std::unique_ptr<ExprAST>> a)
-        : callee(std::move(c)), args(std::move(a)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "ChamadaFuncao(" << callee << "):\n";
-        for (const auto& arg : args) arg->imprimir(indent + 1);
-    }
+    IncDecExprNode(std::string id, IncDecOp op)
+        : identificador(std::move(id)), op(op) {}
 };
 
-struct IncrementExprAST : public ExprAST {
-    std::string var;
-    std::string op;
+// Chamada de Função (Ex: foo(expr1, expr2))
+class FunctionCallExprNode : public ExpressionNode {
+public:
+    std::string nomeFuncao;
+    std::vector<std::unique_ptr<ExpressionNode>> argumentos;
 
-    IncrementExprAST(std::string v, std::string o) : var(std::move(v)), op(std::move(o)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "Incremento(" << var << op << ")\n";
-    }
+    FunctionCallExprNode(std::string nome, std::vector<std::unique_ptr<ExpressionNode>> args)
+        : nomeFuncao(std::move(nome)), argumentos(std::move(args)) {}
 };
 
-// ==========================================
-// NÓS DE COMANDOS (STATEMENTS)
-// ==========================================
-struct StmtAST : public ASTNode {};
-using StmtPtr = std::unique_ptr<StmtAST>;   // apelido usado pelo parser
-
-struct ExprStmtAST : public StmtAST {
-    std::unique_ptr<ExprAST> expr;
-
-    explicit ExprStmtAST(std::unique_ptr<ExprAST> e) : expr(std::move(e)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "ExprStmt:\n";
-        if (expr) expr->imprimir(indent + 1);
-    }
+// =============================================================================
+// COMANDOS / STATEMENTS (Nodes herdando de StatementNode)
+// =============================================================================
+class StatementNode : public ASTNode {
+public:
+    ~StatementNode() override = default;
 };
 
-struct VarDeclStmtAST : public StmtAST {
-    std::string tipo;
+// Bloco de Comandos (Ex: { comando* })
+class BlockStmtNode : public StatementNode {
+public:
+    std::vector<std::unique_ptr<StatementNode>> comandos;
+
+    explicit BlockStmtNode(std::vector<std::unique_ptr<StatementNode>> cmds)
+        : comandos(std::move(cmds)) {}
+};
+
+// Declaração de Variável Única (Auxiliar para tratar o padrão do declarador)
+struct VariableDeclarator {
     std::string nome;
-    std::unique_ptr<ExprAST> initExpr;
-
-    VarDeclStmtAST(std::string t, std::string n, std::unique_ptr<ExprAST> init = nullptr)
-        : tipo(std::move(t)), nome(std::move(n)), initExpr(std::move(init)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "VarDecl(" << tipo << " " << nome << ")";
-        if (initExpr) {
-            std::cout << " =\n";
-            initExpr->imprimir(indent + 1);
-        } else {
-            std::cout << "\n";
-        }
-    }
+    std::unique_ptr<ExpressionNode> inicializador; // Pode ser nullptr caso não venha com "="
 };
 
-struct AssignStmtAST : public StmtAST {
-    std::string nomeVar;
-    std::unique_ptr<ExprAST> expr;
+// Declaração de Variáveis (Ex: int a = 2, b;)
+class VariableDeclStmtNode : public StatementNode {
+public:
+    DataType tipoBasico;
+    std::vector<VariableDeclarator> declaradores;
 
-    AssignStmtAST(std::string n, std::unique_ptr<ExprAST> e)
-        : nomeVar(std::move(n)), expr(std::move(e)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "Atribuicao(" << nomeVar << " =):\n";
-        if (expr) expr->imprimir(indent + 1);
-    }
+    VariableDeclStmtNode(DataType tipo, std::vector<VariableDeclarator> decls)
+        : tipoBasico(tipo), declaradores(std::move(decls)) {}
 };
 
-struct BlockStmtAST : public StmtAST {
-    std::vector<std::unique_ptr<StmtAST>> comandos;
+// Atribuição (Ex: x = expressao;)
+class AssignmentStmtNode : public StatementNode {
+public:
+    std::string identificador;
+    std::unique_ptr<ExpressionNode> expressao;
 
-    explicit BlockStmtAST(std::vector<std::unique_ptr<StmtAST>> c) : comandos(std::move(c)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "Bloco {\n";
-        for (const auto& cmd : comandos) cmd->imprimir(indent + 1);
-        indentar(indent);
-        std::cout << "}\n";
-    }
+    AssignmentStmtNode(std::string id, std::unique_ptr<ExpressionNode> expr)
+        : identificador(std::move(id)), expressao(std::move(expr)) {}
 };
 
-struct IfStmtAST : public StmtAST {
-    std::unique_ptr<ExprAST> condicao;
-    std::unique_ptr<StmtAST> blocoThen;
-    std::unique_ptr<StmtAST> blocoElse;
+// Comando Condicional If-Else (Ex: if (expr) cmd [else cmd])
+class IfStmtNode : public StatementNode {
+public:
+    std::unique_ptr<ExpressionNode> condicao;
+    std::unique_ptr<StatementNode> comandoThen;
+    std::unique_ptr<StatementNode> comandoElse; // Pode ser nullptr se não houver 'else'
 
-    IfStmtAST(std::unique_ptr<ExprAST> c, std::unique_ptr<StmtAST> t, std::unique_ptr<StmtAST> e = nullptr)
-        : condicao(std::move(c)), blocoThen(std::move(t)), blocoElse(std::move(e)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "IfStmt:\n";
-        indentar(indent + 1); std::cout << "[Condicao]:\n";
-        condicao->imprimir(indent + 2);
-        indentar(indent + 1); std::cout << "[Then]:\n";
-        blocoThen->imprimir(indent + 2);
-        if (blocoElse) {
-            indentar(indent + 1); std::cout << "[Else]:\n";
-            blocoElse->imprimir(indent + 2);
-        }
-    }
+    IfStmtNode(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> th, std::unique_ptr<StatementNode> el = nullptr)
+        : condicao(std::move(cond)), comandoThen(std::move(th)), comandoElse(std::move(el)) {}
 };
 
-struct WhileStmtAST : public StmtAST {
-    std::unique_ptr<ExprAST> condicao;
-    std::unique_ptr<StmtAST> corpo;
+// Comando de Laço While (Ex: while (expr) cmd)
+class WhileStmtNode : public StatementNode {
+public:
+    std::unique_ptr<ExpressionNode> condicao;
+    std::unique_ptr<StatementNode> comandoBody;
 
-    WhileStmtAST(std::unique_ptr<ExprAST> c, std::unique_ptr<StmtAST> b)
-        : condicao(std::move(c)), corpo(std::move(b)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "WhileStmt:\n";
-        indentar(indent + 1); std::cout << "[Condicao]:\n";
-        condicao->imprimir(indent + 2);
-        indentar(indent + 1); std::cout << "[Corpo]:\n";
-        corpo->imprimir(indent + 2);
-    }
+    WhileStmtNode(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> body)
+        : condicao(std::move(cond)), comandoBody(std::move(body)) {}
 };
 
-struct ReturnStmtAST : public StmtAST {
-    std::unique_ptr<ExprAST> expr;
+// Comandos de Controle (Break e Continue)
+class BreakStmtNode : public StatementNode {};
+class ContinueStmtNode : public StatementNode {};
 
-    explicit ReturnStmtAST(std::unique_ptr<ExprAST> e = nullptr) : expr(std::move(e)) {}
+// Retorno (Ex: return expressao?;)
+class ReturnStmtNode : public StatementNode {
+public:
+    std::unique_ptr<ExpressionNode> expressao; // Pode ser nullptr se for void
 
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "ReturnStmt:\n";
-        if (expr) expr->imprimir(indent + 1);
-    }
+    explicit ReturnStmtNode(std::unique_ptr<ExpressionNode> expr = nullptr)
+        : expressao(std::move(expr)) {}
 };
 
-struct BreakStmtAST : public StmtAST {
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "BreakStmt\n";
-    }
+// Comando de Expressão Descartada (Ex: expressao;)
+class ExpressionStmtNode : public StatementNode {
+public:
+    std::unique_ptr<ExpressionNode> expressao;
+
+    explicit ExpressionStmtNode(std::unique_ptr<ExpressionNode> expr)
+        : expressao(std::move(expr)) {}
 };
 
-struct ContinueStmtAST : public StmtAST {
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "ContinueStmt\n";
-    }
-};
+// =============================================================================
+// PARÂMETROS E ESTRUTURA GLOBAL DO PROGRAMA
+// =============================================================================
 
-// ==========================================
-// ESTRUTURAS DE FUNÇÕES E PROGRAMA (RAÍZ)
-// ==========================================
-struct ParamAST {
-    std::string tipo;
+// Parâmetro de Função (Ex: int x)
+struct Parameter {
+    DataType tipo;
     std::string nome;
 };
 
-struct FunctionAST : public ASTNode {
-    std::string tipoRetorno;
+// Definição e Declaração de Funções
+class FunctionNode : public ASTNode {
+public:
+    DataType tipoRetorno;
     std::string nome;
-    std::vector<ParamAST> parametros;
-    std::unique_ptr<BlockStmtAST> corpo;
+    std::vector<Parameter> parametros;
+    std::unique_ptr<BlockStmtNode> bloco; // Corpo da função
 
-    FunctionAST(std::string t, std::string n, std::vector<ParamAST> p, std::unique_ptr<BlockStmtAST> b)
-        : tipoRetorno(std::move(t)), nome(std::move(n)), parametros(std::move(p)), corpo(std::move(b)) {}
-
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "FuncaoDecl: " << tipoRetorno << " " << nome << "(";
-        for (size_t i = 0; i < parametros.size(); ++i) {
-            std::cout << parametros[i].tipo << " " << parametros[i].nome;
-            if (i + 1 < parametros.size()) std::cout << ", ";
-        }
-        std::cout << ")\n";
-        if (corpo) corpo->imprimir(indent + 1);
-    }
+    FunctionNode(DataType tipo, std::string nome, std::vector<Parameter> params, std::unique_ptr<BlockStmtNode> corpo)
+        : tipoRetorno(tipo), nome(std::move(nome)), parametros(std::move(params)), bloco(std::move(corpo)) {}
 };
 
-struct ProgramAST : public ASTNode {
-    std::vector<std::unique_ptr<FunctionAST>> funcoes;
+// Raiz do Programa (O programa inteiro encapsulado)
+class ProgramNode : public ASTNode {
+public:
+    std::vector<std::unique_ptr<FunctionNode>> funcoes;
+    std::unique_ptr<FunctionNode> funcaoMain;
 
-    void imprimir(int indent = 0) const override {
-        indentar(indent);
-        std::cout << "=== AST DO PROGRAMA ===\n";
-        for (const auto& f : funcoes) f->imprimir(indent + 1);
-    }
+    ProgramNode(std::vector<std::unique_ptr<FunctionNode>> funcs, std::unique_ptr<FunctionNode> mainFunc)
+        : funcoes(std::move(funcs)), funcaoMain(std::move(mainFunc)) {}
 };

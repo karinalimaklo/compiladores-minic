@@ -1,86 +1,91 @@
 #pragma once
-#include <stdexcept>
-#include <string>
-#include <vector>
-#include "ast.hpp"
-#include "token.hpp"
 
-// Erro sintatico com a posicao do token onde o problema foi encontrado
-struct ErroSintatico : public std::runtime_error {
+#include <vector>
+#include <memory>
+#include <string>
+#include <stdexcept>
+#include "token.hpp"
+#include "ast.hpp"
+
+// Classe de erro customizada para falhas de análise sintática
+class ParserException : public std::runtime_error {
+public:
     Posicao posicao;
-    ErroSintatico(const std::string& msg, Posicao p)
-        : std::runtime_error(msg), posicao(p) {}
+    explicit ParserException(const std::string& mensagem, Posicao pos)
+        : std::runtime_error(mensagem), posicao(pos) {}
 };
 
-// Parser descendente recursivo (LL) para a gramatica do MiniC++.
-// Recebe o vetor de tokens do lexer (terminado em FimArquivo) e devolve a AST.
 class Parser {
-private:
-    std::vector<Token> tokens;
-    size_t pos = 0;
-
-    const Token& atual() const { return espiar(0); }
-
-    const Token& espiar(size_t offset = 0) const {
-        if (pos + offset < tokens.size()) return tokens[pos + offset];
-        return tokens.back();   // o ultimo token e sempre FimArquivo
-    }
-
-    bool checar(TipoToken tipo) const {
-        return atual().tipo == tipo;
-    }
-
-    [[noreturn]] void erro(const std::string& mensagem) const {
-        const Token& t = atual();
-        std::string encontrado = (t.tipo == TipoToken::FimArquivo) ? "fim do arquivo"
-                                                                     : "'" + t.lexeme + "'";
-        throw ErroSintatico("Erro sintatico [linha " + std::to_string(t.posicao.linha) +
-                            ", coluna " + std::to_string(t.posicao.coluna) + "]: " +
-                            mensagem + ". Encontrado: " + encontrado,
-                            t.posicao);
-    }
-
-    Token consumir(TipoToken tipo, const std::string& mensagemErro) {
-        if (checar(tipo)) {
-            Token t = atual();
-            pos++;
-            return t;
-        }
-        erro(mensagemErro);
-    }
-
-    bool ehTipoBasico(TipoToken tipo) const {
-        return tipo == TipoToken::PalInt || tipo == TipoToken::PalBool ||
-               tipo == TipoToken::PalChar || tipo == TipoToken::PalDouble;
-    }
-
 public:
-    explicit Parser(std::vector<Token> tokensEntrada);
+    // O construtor recebe a lista de tokens gerada pelo seu Lexer por movimento (move semantics)
+    explicit Parser(std::vector<Token> tokens);
 
-    // Ponto de entrada: retorna a AST completa do programa
-    std::unique_ptr<ProgramAST> parsePrograma();
+    // Ponto de entrada principal do compilador para processar toda a gramática
+    std::unique_ptr<ProgramNode> parse();
 
 private:
-    std::unique_ptr<FunctionAST> parseDeclaracaoFuncao();
-    std::vector<ParamAST> parseParametros();
-    ParamAST parseParametro();
-    std::unique_ptr<BlockStmtAST> parseBloco();
+    std::vector<Token> m_tokens;
+    size_t m_atual; // Índice do token que está sendo analisado no momento
 
-    StmtPtr parseComando();
-    std::vector<StmtPtr> parseDeclaracaoVariavel();
-    StmtPtr parseAtribuicao();
-    StmtPtr parseComandoIf();
-    StmtPtr parseComandoWhile();
-    StmtPtr parseComandoReturn();
+    // =============================================================================
+    // MÉTODOS AUXILIARES DO PARSER (Controle e Consumo de Tokens)
+    // =============================================================================
+    
+    // Retorna o token atual sem consumi-lo (Lookahead)
+    Token espiar() const;
 
-    ExprPtr parseExpressao();
-    ExprPtr parseExpressaoOr();
-    ExprPtr parseExpressaoAnd();
-    ExprPtr parseExpressaoIgualdade();
-    ExprPtr parseExpressaoRelacional();
-    ExprPtr parseExprAritmetica();
-    ExprPtr parseTermo();
-    ExprPtr parseFator();
-    ExprPtr parseChamadaFuncao();
-    std::vector<ExprPtr> parseArgumentos();
+    // Retorna o token anterior
+    Token anterior() const;
+
+    // Verifica se chegamos ao fim da lista de tokens
+    bool fim() const;
+
+    // Verifica se o token atual é de um determinado tipo
+    bool checar(TipoToken tipo) const;
+
+    // Avança para o próximo token e retorna o token recém-consumido
+    Token avancar();
+
+    // Se o token atual for do tipo esperado, consome-o. Caso contrário, lança um erro sintático.
+    Token consumir(TipoToken tipo, const std::string& mensagemErro);
+
+    // Combina checar() e avancar(): se o token atual for de algum dos tipos listados, consome e retorna true
+    bool match(const std::vector<TipoToken>& tipos);
+
+    // Método utilitário para converter TipoToken de palavras-chave para a enum DataType da AST
+    DataType mapearTipoBasico(TipoToken tipo);
+
+    // =============================================================================
+    // MÉTODOS DE REGRAS DA GRAMÁTICA (Recursive Descent)
+    // =============================================================================
+
+    // Estrutura Global do Programa
+    std::unique_ptr<FunctionNode> parseDeclaracaoFuncao();
+    std::unique_ptr<FunctionNode> parseFuncaoMain();
+    
+    // Funções e Parâmetros
+    std::vector<Parameter> parseParametros();
+    Parameter parseParametro();
+    std::vector<std::unique_ptr<ExpressionNode>> parseArgumentos();
+
+    // Comandos (Statements) e Controle de Fluxo
+    std::unique_ptr<StatementNode> parseComando();
+    std::unique_ptr<BlockStmtNode> parseBloco();
+    std::unique_ptr<StatementNode> parseDeclaracaoVariavel();
+    std::unique_ptr<StatementNode> parseAtribuicaoOuExpressaoStmt(); // Resolve o conflito de fator vs identificador no início da linha
+    std::unique_ptr<StatementNode> parseComandoIf();
+    std::unique_ptr<StatementNode> parseComandoWhile();
+    std::unique_ptr<StatementNode> parseComandoBreak();
+    std::unique_ptr<StatementNode> parseComandoContinue();
+    std::unique_ptr<StatementNode> parseComandoReturn();
+
+    // Expressões (Hierarquia de Precedência - Da menor para a maior)
+    std::unique_ptr<ExpressionNode> parseExpressao();
+    std::unique_ptr<ExpressionNode> parseExpressaoOr();
+    std::unique_ptr<ExpressionNode> parseExpressaoAnd();
+    std::unique_ptr<ExpressionNode> parseExpressaoIgualdade();
+    std::unique_ptr<ExpressionNode> parseExpressaoRelacional();
+    std::unique_ptr<ExpressionNode> parseExprAritmetica();
+    std::unique_ptr<ExpressionNode> parseTermo();
+    std::unique_ptr<ExpressionNode> parseFator();
 };
