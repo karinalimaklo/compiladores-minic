@@ -5,43 +5,37 @@
 #include "parserAST.hpp"
 #include "parserRegex.hpp"
 
-int AFN::getInicial() const{
-        return this->inicial;
-}
-const EstadoAFN& AFN:: getEstado(int q) const {
-        assert(valido(q));
-        return estados[q];
-}
-void AFN:: setInicial(int ini) {
-        assert(valido(ini));
-        this->inicial = ini;
-}
-void AFN:: setAceitacao(int estado, size_t indice_tabela) {
-        assert(valido(estado));
-        this->estados[estado].etiqueta = indice_tabela;
+void AFN::adicionarEpsilon(int origem, int destino) {
+    assert(valido(origem) && valido(destino));
+    this->transicoesEps[origem].push_back(destino);
+        
 }
 int AFN:: novoEstado() {
-        estados.push_back(EstadoAFN{});
-        return static_cast<int>(estados.size()) - 1;
+    this->estados.push_back(Estado{});
+    this->transicoesEps.emplace_back();
+    return (static_cast<int>(estados.size())-1);
 }
 
-void AFN::adicionarTransicao(int origem, char simbolo, int destino) {
-        assert(valido(origem) && valido(destino));
-        estados[origem].transicoes.push_back(Transicao{simbolo, simbolo, destino});
+const std::vector<int>& AFN:: getTransEpsilon(int origem) const {
+    return this->transicoesEps[origem];
 }
-void AFN::adicionarTransicaoIntervalo(int origem, char simbolo_ini, char simbolo_fim, int destino) {
-    assert(valido(origem) && valido(destino));
-    estados[origem].transicoes.push_back(Transicao{simbolo_ini, simbolo_fim, destino});
+static void fecho(const AFN& a, int q, std::vector<bool>& marcado) {
+    if (marcado[q]) return;
+    marcado[q] = true;
+    for (int d : a.getTransEpsilon(q)) fecho(a, d, marcado);
 }
-void AFN::adicionarEpsilon(int origem, int destino) {
-        assert(valido(origem) && valido(destino));
-        estados[origem].transicoesEps.push_back(destino);
-}
-
-bool AFN:: valido(int q) const {
-        return (q >= 0 && q < static_cast<int>(estados.size()));
-}
-
-int AFN:: quantidadeEstados() const {
-        return static_cast<int>(estados.size());
-}
+bool AFN::aceita(const std::string& entrada) const {
+      std::vector<bool> atual(estados.size(), false);
+      fecho(*this, inicial, atual);
+      for (char c : entrada) {
+          std::vector<bool> prox(estados.size(), false);
+          for (size_t q = 0; q < estados.size(); q++)
+              if (atual[q])
+                  for (const Transicao& t : estados[q].transicoes)
+                      if (t.ini <= c && c <= t.fim) fecho(*this, t.destino, prox);
+          atual = prox;
+      }
+      for (size_t q = 0; q < estados.size(); q++)
+          if (atual[q] && estados[q].etiqueta >= 0) return true;
+      return false;
+  }

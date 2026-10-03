@@ -94,6 +94,7 @@ RegexPtr parserRegex::parseAtom() {
         return node;
     }
 
+
     return parseLiteral();
 }
 

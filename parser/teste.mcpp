@@ -1,0 +1,16 @@
+int fatorial(int n) {
+    if (n <= 1) { return 1; }
+    return n * fatorial(n - 1);
+}
+int main() {
+    double x = 3.14;
+    int y = 0;
+    string s = "ola mundo 42";
+    char c = 'a';
+    y += 10; x++;
+    while (y != 0 && !false) { cout << s; y--; }
+    cin >> y;
+    bool b = (y >= 5) ? true : false;
+    int v[3]; v[0] = 007;
+    y = y @ 2;
+}

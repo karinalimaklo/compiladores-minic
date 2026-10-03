@@ -32,7 +32,7 @@ const std::string NAO_NULO = "1-9";
 const std::string LETRA = "a-zA-Z";
 
 // caractere ::= letra | digito | " "
-const std::string CARACTERE = "[" + LETRA  + DIGITO + "]";
+const std::string CARACTERE = "[" + LETRA  + DIGITO + " ]";
 
 }  
 
@@ -41,16 +41,16 @@ std::vector<EntradaLexica> criarTabelaTokens() {
 
     // numero_inteiro ::= "0" | digito_nao_nulo (digito)*
     tabela.push_back({TipoToken::IntLit,
-        regex("0|[" + NAO_NULO + DIGITO + "]*")});
+        regex("0|[" + NAO_NULO + "][" + DIGITO + "]*")});
 
     // numero_real ::= digito_nao_nulo digito* "." digito+ | "0" "." digito+
     tabela.push_back({TipoToken::DoubleLit,
-        regex("[" + NAO_NULO + "]"+ "[" + DIGITO + "]" + "*.[" + DIGITO + DIGITO + "]*"
-              "|0.[" + DIGITO + DIGITO + "]*")});
+        regex("[" + NAO_NULO + "][" + DIGITO + "]*.[" + DIGITO + "][" + DIGITO + "]*"
+              "|0.[" + DIGITO + "][" + DIGITO + "]*")});
 
     // identificador ::= (letra) (letra | digito | "_")*
     tabela.push_back({TipoToken::Ident,
-        regex(" ["+ LETRA+ "]" + "[" + LETRA  + DIGITO + "_]*")});
+        regex("["+ LETRA+ "]" + "[" + LETRA  + DIGITO + "_]*")});
 
     // literal_char ::= "'" caractere "'"
     tabela.push_back({TipoToken::CharLit,
