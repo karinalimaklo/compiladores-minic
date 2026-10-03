@@ -1,0 +1,128 @@
+# Gramática para o MiniC++ (Versão Reduzida)
+
+# ==========================================
+# Elementos léxicos
+# ==========================================
+
+# Dígitos decimais básicos 
+digito ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+digito_nao_nulo ::= "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+# Números
+numero_inteiro ::= "0" | digito_nao_nulo (digito)* ;
+numero_real ::= digito_nao_nulo digito* "." digito+ | "0" "." digito+ ;
+numero ::= numero_inteiro | numero_real ;
+
+# Letras
+letra ::= "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" 
+        | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" 
+        | "u" | "v" | "w" | "x" | "y" | "z"
+        | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" 
+        | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" 
+        | "U" | "V" | "W" | "X" | "Y" | "Z" ;
+
+# Caracteres
+caractere ::= letra | digito | " " ;
+
+# Identificador (deve começar com letra)
+identificador ::= letra (letra | digito | "_")* ;
+
+# Tipos de dados
+tipo_basico ::= "int" | "bool" | "char" | "double" ;
+tipo_retorno ::= tipo_basico | "void" ;
+
+# Literais
+literal_bool ::= "true" | "false" ;
+literal_char ::= "'" caractere "'" ;
+literal ::= numero | literal_bool | literal_char ;
+
+# Operadores
+op_aditivo ::= "+" | "-" ;
+op_multiplicativo ::= "*" | "/" | "%" ;
+op_relacional ::= "<" | "<=" | ">" | ">=" ;
+op_igualdade ::= "==" | "!=" ;
+op_logico_and ::= "&&" ;
+op_logico_or ::= "||" ;
+op_unario ::= "!" ;
+
+# ==========================================
+# Expressões (com hierarquia de precedência)
+# ==========================================
+
+incremento ::= identificador "++" 
+             | identificador "--" ;
+
+fator ::= literal
+        | chamada_funcao
+        | incremento
+        | identificador
+        | "(" expressao ")"
+        | op_unario fator ;
+
+termo ::= fator (op_multiplicativo fator)* ;
+
+expr_aritmetica ::= termo (op_aditivo termo)* ;
+
+expressao_relacional ::= expr_aritmetica (op_relacional expr_aritmetica)* ;
+
+expressao_igualdade ::= expressao_relacional (op_igualdade expressao_relacional)* ;
+
+expressao_and ::= expressao_igualdade (op_logico_and expressao_igualdade)* ;
+
+expressao_or ::= expressao_and (op_logico_or expressao_and)* ;
+
+expressao ::= expressao_or ;
+
+# ==========================================
+# Declaração de Variáveis e Atribuição
+# ==========================================
+
+declarador ::= identificador ("=" expressao)? ;
+declaracao_variavel ::= tipo_basico declarador ("," declarador)* ";" ;
+
+atribuicao ::= identificador "=" expressao ";" ;
+
+# ==========================================
+# Funções
+# ==========================================
+
+chamada_funcao ::= identificador "(" argumentos? ")" ;
+argumentos ::= expressao ("," expressao)* ;
+
+parametro ::= tipo_basico identificador ;
+parametros ::= parametro ("," parametro)* ;
+declaracao_funcao ::= tipo_retorno identificador "(" parametros? ")" bloco ;
+
+# ==========================================
+# Comandos (Statements) e Controle de Fluxo
+# ==========================================
+
+comando_if ::= "if" "(" expressao ")" comando ("else" comando)? ;
+
+comando_while ::= "while" "(" expressao ")" comando ;
+
+comando_break ::= "break" ";" ;
+
+comando_continue ::= "continue" ";" ;
+
+comando_return ::= "return" expressao? ";" ;
+
+bloco ::= "{" comando* "}" ;
+
+comando ::= declaracao_variavel
+          | atribuicao
+          | comando_if
+          | comando_while
+          | comando_break
+          | comando_continue
+          | comando_return
+          | bloco
+          | expressao ";" ;
+
+# ==========================================
+# Estrutura do Programa
+# ==========================================
+
+funcao_main ::= "int" "main" "(" ")" bloco ;
+
+programa ::= declaracao_funcao* funcao_main ;
