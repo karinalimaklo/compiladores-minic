@@ -1,27 +1,43 @@
 #pragma once
-#include "token.hpp"
-#include "ast.hpp"
-#include <vector>
 #include <stdexcept>
-#include <iostream>
+#include <string>
+#include <vector>
+#include "ast.hpp"
+#include "token.hpp"
 
+// Erro sintatico com a posicao do token onde o problema foi encontrado
+struct ErroSintatico : public std::runtime_error {
+    Posicao posicao;
+    ErroSintatico(const std::string& msg, Posicao p)
+        : std::runtime_error(msg), posicao(p) {}
+};
+
+// Parser descendente recursivo (LL) para a gramatica do MiniC++.
+// Recebe o vetor de tokens do lexer (terminado em FimArquivo) e devolve a AST.
 class Parser {
 private:
-    std::vector tokens;
+    std::vector<Token> tokens;
     size_t pos = 0;
 
-    Token atual() const {
-        if (pos < tokens.size()) return tokens[pos];
-        return {TipoToken::FimArquivo, "", {}};
-    }
+    const Token& atual() const { return espiar(0); }
 
-    Token espiar(size_t offset = 0) const {
+    const Token& espiar(size_t offset = 0) const {
         if (pos + offset < tokens.size()) return tokens[pos + offset];
-        return {TipoToken::FimArquivo, "", {}};
+        return tokens.back();   // o ultimo token e sempre FimArquivo
     }
 
     bool checar(TipoToken tipo) const {
         return atual().tipo == tipo;
+    }
+
+    [[noreturn]] void erro(const std::string& mensagem) const {
+        const Token& t = atual();
+        std::string encontrado = (t.tipo == TipoToken::FimArquivo) ? "fim do arquivo"
+                                                                     : "'" + t.lexeme + "'";
+        throw ErroSintatico("Erro sintatico [linha " + std::to_string(t.posicao.linha) +
+                            ", coluna " + std::to_string(t.posicao.coluna) + "]: " +
+                            mensagem + ". Encontrado: " + encontrado,
+                            t.posicao);
     }
 
     Token consumir(TipoToken tipo, const std::string& mensagemErro) {
@@ -30,10 +46,7 @@ private:
             pos++;
             return t;
         }
-        Token errToken = atual();
-        throw std::runtime_error("Erro Sintatico [Linha " + std::to_string(errToken.posicao.linha) + 
-                                 ", Coluna " + std::to_string(errToken.posicao.coluna) + 
-                                 "]: " + mensagemErro + ". Encontrado: '" + errToken.lexeme + "'");
+        erro(mensagemErro);
     }
 
     bool ehTipoBasico(TipoToken tipo) const {
@@ -42,32 +55,32 @@ private:
     }
 
 public:
-    explicit Parser(std::vector tokensEntrada) : tokens(std::move(tokensEntrada)) {}
+    explicit Parser(std::vector<Token> tokensEntrada);
 
-    // Ponto de entrada: Retorna a AST completa do programa!
-    std::unique_ptr parsePrograma();
+    // Ponto de entrada: retorna a AST completa do programa
+    std::unique_ptr<ProgramAST> parsePrograma();
 
 private:
-    std::unique_ptr parseDeclaracaoFuncao();
-    std::vector parseParametros();
+    std::unique_ptr<FunctionAST> parseDeclaracaoFuncao();
+    std::vector<ParamAST> parseParametros();
     ParamAST parseParametro();
-    std::unique_ptr parseBloco();
+    std::unique_ptr<BlockStmtAST> parseBloco();
 
-    std::unique_ptr parseComando();
-    std::vector> parseDeclaracaoVariavel();
-    std::unique_ptr parseAtribuicao();
-    std::unique_ptr parseComandoIf();
-    std::unique_ptr parseComandoWhile();
-    std::unique_ptr parseComandoReturn();
+    StmtPtr parseComando();
+    std::vector<StmtPtr> parseDeclaracaoVariavel();
+    StmtPtr parseAtribuicao();
+    StmtPtr parseComandoIf();
+    StmtPtr parseComandoWhile();
+    StmtPtr parseComandoReturn();
 
-    std::unique_ptr parseExpressao();
-    std::unique_ptr parseExpressaoOr();
-    std::unique_ptr parseExpressaoAnd();
-    std::unique_ptr parseExpressaoIgualdade();
-    std::unique_ptr parseExpressaoRelacional();
-    std::unique_ptr parseExprAritmetica();
-    std::unique_ptr parseTermo();
-    std::unique_ptr parseFator();
-    std::unique_ptr parseChamadaFuncao();
-    std::vector> parseArgumentos();
+    ExprPtr parseExpressao();
+    ExprPtr parseExpressaoOr();
+    ExprPtr parseExpressaoAnd();
+    ExprPtr parseExpressaoIgualdade();
+    ExprPtr parseExpressaoRelacional();
+    ExprPtr parseExprAritmetica();
+    ExprPtr parseTermo();
+    ExprPtr parseFator();
+    ExprPtr parseChamadaFuncao();
+    std::vector<ExprPtr> parseArgumentos();
 };

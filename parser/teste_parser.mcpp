@@ -1,0 +1,34 @@
+int fatorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fatorial(n - 1);
+}
+
+bool ehPar(int x) {
+    return x % 2 == 0;
+}
+
+void imprimeNada() {
+    return;
+}
+
+int main() {
+    int i = 0, soma;
+    double media = 0.5;
+    char c = 'a';
+    bool ok = true;
+    soma = 0;
+    while (i < 10 && !(soma > 100)) {
+        if (ehPar(i)) {
+            soma = soma + fatorial(i);
+        } else {
+            i++;
+            continue;
+        }
+        i++;
+        if (soma >= 50 || i == 7) break;
+    }
+    imprimeNada();
+    return soma - 2 * (i + 1) / 3;
+}

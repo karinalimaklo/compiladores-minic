@@ -19,6 +19,7 @@ struct ASTNode {
 // NÓS DE EXPRESSÃO
 // ==========================================
 struct ExprAST : public ASTNode {};
+using ExprPtr = std::unique_ptr<ExprAST>;   // apelido usado pelo parser
 
 struct LiteralExprAST : public ExprAST {
     std::string valor;
@@ -42,10 +43,10 @@ struct VariableExprAST : public ExprAST {
 
 struct BinaryExprAST : public ExprAST {
     std::string op;
-    std::unique_ptr esq;
-    std::unique_ptr dir;
+    std::unique_ptr<ExprAST> esq;
+    std::unique_ptr<ExprAST> dir;
 
-    BinaryExprAST(std::string o, std::unique_ptr e, std::unique_ptr d)
+    BinaryExprAST(std::string o, std::unique_ptr<ExprAST> e, std::unique_ptr<ExprAST> d)
         : op(std::move(o)), esq(std::move(e)), dir(std::move(d)) {}
 
     void imprimir(int indent = 0) const override {
@@ -58,9 +59,9 @@ struct BinaryExprAST : public ExprAST {
 
 struct UnaryExprAST : public ExprAST {
     std::string op;
-    std::unique_ptr operando;
+    std::unique_ptr<ExprAST> operando;
 
-    UnaryExprAST(std::string o, std::unique_ptr opnd)
+    UnaryExprAST(std::string o, std::unique_ptr<ExprAST> opnd)
         : op(std::move(o)), operando(std::move(opnd)) {}
 
     void imprimir(int indent = 0) const override {
@@ -72,9 +73,9 @@ struct UnaryExprAST : public ExprAST {
 
 struct CallExprAST : public ExprAST {
     std::string callee;
-    std::vector> args;
+    std::vector<std::unique_ptr<ExprAST>> args;
 
-    CallExprAST(std::string c, std::vector> a)
+    CallExprAST(std::string c, std::vector<std::unique_ptr<ExprAST>> a)
         : callee(std::move(c)), args(std::move(a)) {}
 
     void imprimir(int indent = 0) const override {
@@ -100,11 +101,12 @@ struct IncrementExprAST : public ExprAST {
 // NÓS DE COMANDOS (STATEMENTS)
 // ==========================================
 struct StmtAST : public ASTNode {};
+using StmtPtr = std::unique_ptr<StmtAST>;   // apelido usado pelo parser
 
 struct ExprStmtAST : public StmtAST {
-    std::unique_ptr expr;
+    std::unique_ptr<ExprAST> expr;
 
-    explicit ExprStmtAST(std::unique_ptr e) : expr(std::move(e)) {}
+    explicit ExprStmtAST(std::unique_ptr<ExprAST> e) : expr(std::move(e)) {}
 
     void imprimir(int indent = 0) const override {
         indentar(indent);
@@ -116,9 +118,9 @@ struct ExprStmtAST : public StmtAST {
 struct VarDeclStmtAST : public StmtAST {
     std::string tipo;
     std::string nome;
-    std::unique_ptr initExpr;
+    std::unique_ptr<ExprAST> initExpr;
 
-    VarDeclStmtAST(std::string t, std::string n, std::unique_ptr init = nullptr)
+    VarDeclStmtAST(std::string t, std::string n, std::unique_ptr<ExprAST> init = nullptr)
         : tipo(std::move(t)), nome(std::move(n)), initExpr(std::move(init)) {}
 
     void imprimir(int indent = 0) const override {
@@ -135,9 +137,9 @@ struct VarDeclStmtAST : public StmtAST {
 
 struct AssignStmtAST : public StmtAST {
     std::string nomeVar;
-    std::unique_ptr expr;
+    std::unique_ptr<ExprAST> expr;
 
-    AssignStmtAST(std::string n, std::unique_ptr e)
+    AssignStmtAST(std::string n, std::unique_ptr<ExprAST> e)
         : nomeVar(std::move(n)), expr(std::move(e)) {}
 
     void imprimir(int indent = 0) const override {
@@ -148,9 +150,9 @@ struct AssignStmtAST : public StmtAST {
 };
 
 struct BlockStmtAST : public StmtAST {
-    std::vector> comandos;
+    std::vector<std::unique_ptr<StmtAST>> comandos;
 
-    explicit BlockStmtAST(std::vector> c) : comandos(std::move(c)) {}
+    explicit BlockStmtAST(std::vector<std::unique_ptr<StmtAST>> c) : comandos(std::move(c)) {}
 
     void imprimir(int indent = 0) const override {
         indentar(indent);
@@ -162,11 +164,11 @@ struct BlockStmtAST : public StmtAST {
 };
 
 struct IfStmtAST : public StmtAST {
-    std::unique_ptr condicao;
-    std::unique_ptr blocoThen;
-    std::unique_ptr blocoElse;
+    std::unique_ptr<ExprAST> condicao;
+    std::unique_ptr<StmtAST> blocoThen;
+    std::unique_ptr<StmtAST> blocoElse;
 
-    IfStmtAST(std::unique_ptr c, std::unique_ptr t, std::unique_ptr e = nullptr)
+    IfStmtAST(std::unique_ptr<ExprAST> c, std::unique_ptr<StmtAST> t, std::unique_ptr<StmtAST> e = nullptr)
         : condicao(std::move(c)), blocoThen(std::move(t)), blocoElse(std::move(e)) {}
 
     void imprimir(int indent = 0) const override {
@@ -184,10 +186,10 @@ struct IfStmtAST : public StmtAST {
 };
 
 struct WhileStmtAST : public StmtAST {
-    std::unique_ptr condicao;
-    std::unique_ptr corpo;
+    std::unique_ptr<ExprAST> condicao;
+    std::unique_ptr<StmtAST> corpo;
 
-    WhileStmtAST(std::unique_ptr c, std::unique_ptr b)
+    WhileStmtAST(std::unique_ptr<ExprAST> c, std::unique_ptr<StmtAST> b)
         : condicao(std::move(c)), corpo(std::move(b)) {}
 
     void imprimir(int indent = 0) const override {
@@ -201,14 +203,28 @@ struct WhileStmtAST : public StmtAST {
 };
 
 struct ReturnStmtAST : public StmtAST {
-    std::unique_ptr expr;
+    std::unique_ptr<ExprAST> expr;
 
-    explicit ReturnStmtAST(std::unique_ptr e = nullptr) : expr(std::move(e)) {}
+    explicit ReturnStmtAST(std::unique_ptr<ExprAST> e = nullptr) : expr(std::move(e)) {}
 
     void imprimir(int indent = 0) const override {
         indentar(indent);
         std::cout << "ReturnStmt:\n";
         if (expr) expr->imprimir(indent + 1);
+    }
+};
+
+struct BreakStmtAST : public StmtAST {
+    void imprimir(int indent = 0) const override {
+        indentar(indent);
+        std::cout << "BreakStmt\n";
+    }
+};
+
+struct ContinueStmtAST : public StmtAST {
+    void imprimir(int indent = 0) const override {
+        indentar(indent);
+        std::cout << "ContinueStmt\n";
     }
 };
 
@@ -223,10 +239,10 @@ struct ParamAST {
 struct FunctionAST : public ASTNode {
     std::string tipoRetorno;
     std::string nome;
-    std::vector parametros;
-    std::unique_ptr corpo;
+    std::vector<ParamAST> parametros;
+    std::unique_ptr<BlockStmtAST> corpo;
 
-    FunctionAST(std::string t, std::string n, std::vector p, std::unique_ptr b)
+    FunctionAST(std::string t, std::string n, std::vector<ParamAST> p, std::unique_ptr<BlockStmtAST> b)
         : tipoRetorno(std::move(t)), nome(std::move(n)), parametros(std::move(p)), corpo(std::move(b)) {}
 
     void imprimir(int indent = 0) const override {
@@ -242,7 +258,7 @@ struct FunctionAST : public ASTNode {
 };
 
 struct ProgramAST : public ASTNode {
-    std::vector> funcoes;
+    std::vector<std::unique_ptr<FunctionAST>> funcoes;
 
     void imprimir(int indent = 0) const override {
         indentar(indent);
