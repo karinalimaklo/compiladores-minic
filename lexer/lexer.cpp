@@ -1,5 +1,4 @@
 #include "lexer.hpp"
-
 #include "afdConstructor.hpp"
 #include "afn.hpp"
 #include "afnConstructor.hpp"

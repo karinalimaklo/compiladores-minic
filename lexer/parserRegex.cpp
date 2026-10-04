@@ -25,11 +25,11 @@ RegexPtr parserRegex::parseUnion() {
     while(match('|')) {
         RegexPtr right = parseConcat();
 
-        left = std::make_unique<RegexNode>(Uniao {
+        left = std::make_unique<RegexNode>(RegexNode{Uniao {
             (std::move(left)),
             (std::move(right))
 
-    });
+    }});
 }
     return left;
 }
@@ -39,11 +39,11 @@ RegexPtr parserRegex::parseConcat() {
     while (isAtom()) {
         RegexPtr right = parseRepetition();
 
-        left = std::make_unique<RegexNode>(Concat {
+        left = std::make_unique<RegexNode>(RegexNode{Concat {
             (std::move(left)),
             (std::move(right))
 
-        });
+        }});
     }
     return left;
 
@@ -53,9 +53,9 @@ RegexPtr parserRegex::parseRepetition() {
     RegexPtr node = parseAtom();
 
     while (match('*')) {
-        node = std::make_unique<RegexNode>(Star {
+        node = std::make_unique<RegexNode>(RegexNode{Star{
             (std::move(node))
-            });
+    }});
     }
     return node;
 }
@@ -75,9 +75,9 @@ RegexPtr parserRegex::parseClasse() {
         intervalos_temp.push_back(Intervalo{ini, fim});
     }
     expect(']');
-    RegexPtr node = std::make_unique<RegexNode>(ClasseCaractere {
+    RegexPtr node = std::make_unique<RegexNode>(RegexNode{ClasseCaractere {
             intervalos_temp
-    });
+}});
     return node;
 }
 
@@ -104,7 +104,7 @@ RegexPtr parserRegex::parseLiteral() {
     }
     char lit = input[pos++];
 
-    return std::make_unique<RegexNode>(Literal{lit});
+    return std::make_unique<RegexNode>(RegexNode{Literal{lit}});
 }
 bool parserRegex::isAtom() {
 

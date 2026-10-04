@@ -86,7 +86,7 @@ int main() {
     std::cout << "==================================================\n\n";
 
     // 1. Varre a pasta de testes que DEVEM compilar com sucesso
-    std::string pastaValidos = "./testes/validos";
+    std::string pastaValidos = "../testes/validos";
     if (fs::exists(pastaValidos)) {
         for (const auto& entry : fs::directory_iterator(pastaValidos)) {
             if (entry.path().extension() == ".mc" || entry.path().extension() == ".cpp") {
@@ -99,7 +99,7 @@ int main() {
     }
 
     // 2. Varre a pasta de testes que DEVEM falhar (Léxica ou Sintaticamente)
-    std::string pastaInvalidos = "./testes/invalidos";
+    std::string pastaInvalidos = "../testes/invalidos";
     if (fs::exists(pastaInvalidos)) {
         for (const auto& entry : fs::directory_iterator(pastaInvalidos)) {
             if (entry.path().extension() == ".mc" || entry.path().extension() == ".cpp") {

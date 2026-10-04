@@ -4,6 +4,12 @@ int calcular() {
     return y;
 }
 
+void rotina() {
+    return;
+}
+
 int main() {
+    rotina();
     int resultado = calcular();
+    int z = 10 + 5 * 2 / 2 % 3;
 }
