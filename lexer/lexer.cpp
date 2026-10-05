@@ -114,8 +114,6 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::PalBreak:     return "PalBreak";
         case TipoToken::PalContinue:  return "PalContinue";
         case TipoToken::PalRet:       return "PalRet";
-        case TipoToken::PalCin:       return "PalCin";
-        case TipoToken::PalCout:      return "PalCout";
         case TipoToken::Plus:         return "Plus";
         case TipoToken::Min:          return "Min";
         case TipoToken::Star:         return "Star";
@@ -135,8 +133,6 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::Not:          return "Not";
         case TipoToken::PlusPLus:     return "PlusPlus";
         case TipoToken::MinMin:       return "MinMin";
-        case TipoToken::Shl:          return "Shl";
-        case TipoToken::Shr:          return "Shr";
         case TipoToken::Interrogacao: return "Interrogacao";
         case TipoToken::DoisPontos:   return "DoisPontos";
         case TipoToken::ColEsquerda:  return "ColEsquerda";

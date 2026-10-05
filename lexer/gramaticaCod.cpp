@@ -89,10 +89,6 @@ std::vector<EntradaLexica> criarTabelaTokens() {
     tabela.push_back({TipoToken::PlusPLus,     textoFixo("++")});
     tabela.push_back({TipoToken::MinMin,       textoFixo("--")});
 
-    // comando_cout, comando_cin
-    tabela.push_back({TipoToken::Shl,          textoFixo("<<")});
-    tabela.push_back({TipoToken::Shr,          textoFixo(">>")});
-
     // expressao_ternaria
     tabela.push_back({TipoToken::Interrogacao, textoFixo("?")});
     tabela.push_back({TipoToken::DoisPontos,   textoFixo(":")});
@@ -123,8 +119,6 @@ const std::unordered_map<std::string, TipoToken>& palavrasChave() {
         {"while", TipoToken::PalWhile},   {"for", TipoToken::PalFor},
         {"break", TipoToken::PalBreak},   {"continue", TipoToken::PalContinue},
         {"return", TipoToken::PalRet},
-        // entrada e saida
-        {"cin", TipoToken::PalCin},       {"cout", TipoToken::PalCout},
     };
     return tabela;
 }

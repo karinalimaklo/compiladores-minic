@@ -13,14 +13,12 @@ enum class TipoToken {
     PalInt, PalChar, PalDouble, PalBool, PalString, PalVoid,
     PalTrue, PalFalse,
     PalIf, PalElse, PalWhile, PalFor, PalBreak, PalContinue, PalRet,
-    PalCin, PalCout,
     // Operadores
     Plus, Min, Star, Div, Percent,
     Assign, PlusAssign, MinAssign,
     Eq, NotEq, Gt, Ge, Lt, Le,
     AndAnd, OrOr, Not,
     PlusPLus, MinMin,
-    Shl, Shr,               // << (cout) e >> (cin)
     Interrogacao, DoisPontos,  // ? e : (expressao ternaria)
     // Pontuacao
     ColEsquerda, ColDireita, ChavesEsq, ChavesDir, ColchEsq, ColchDir,
