@@ -27,9 +27,14 @@ caractere ::= letra | digito | " " ;
 # Identificador (deve começar com letra)
 identificador ::= letra (letra | digito | "_")* ;
 
-# Tipos de dados
-tipo_basico ::= "int" | "bool" | "char" | "double" ;
-tipo_retorno ::= tipo_basico | "void" ;
+# Tipos de dados 
+tipo_base ::= "int" | "bool" | "char" | "double" | identificador ;
+tipo_retorno_base ::= tipo_base | "void" ;
+
+ponteiro_opt ::= ("*")* ;
+
+tipo_basico ::= tipo_base ponteiro_opt ;
+tipo_retorno ::= tipo_retorno_base ponteiro_opt ;
 
 # Literais
 literal_bool ::= "true" | "false" ;
@@ -52,12 +57,18 @@ op_unario ::= "!" ;
 incremento ::= identificador "++" 
              | identificador "--" ;
 
-fator ::= literal
-        | chamada_funcao
-        | incremento
-        | identificador
-        | "(" expressao ")"
-        | op_unario fator ;
+fator_nucleo ::= literal
+               | chamada_funcao
+               | incremento
+               | identificador
+               | "(" expressao ")"
+               | op_unario fator_nucleo ;
+
+# Operadores de acesso a membro
+op_acesso ::= "." | "->" ;
+
+# Regra que permite acessos consecutivos em cadeia (Maior precedência da gramática)
+fator ::= fator_nucleo (op_acesso identificador)* ;
 
 termo ::= fator (op_multiplicativo fator)* ;
 
@@ -120,9 +131,19 @@ comando ::= declaracao_variavel
           | expressao ";" ;
 
 # ==========================================
+# Definição de Estruturas Orientadas a Objetos
+# ==========================================
+
+campo_atributo ::= tipo_basico identificador ";" ;
+declaracao_struct_classe ::= ("struct" | "class") identificador "{" campo_atributo* "}" ";" ;
+
+
+# ==========================================
 # Estrutura do Programa
 # ==========================================
 
 funcao_main ::= "int" "main" "(" ")" bloco ;
 
-programa ::= declaracao_funcao* funcao_main ;
+elemento_global ::= declaracao_struct_classe | declaracao_funcao ;
+
+programa ::= elemento_global* funcao_main ;
