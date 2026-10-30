@@ -48,12 +48,13 @@ private:
     //Combina checar() e avancar(), onde se o token atual for de algum dos tipos listados, consome e retorna true
     bool match(const std::vector<TipoToken>& tipos);
 
-    //Método utilitário para converter TipoToken para a enum DataType da AST
-    DataType mapearTipoBasico(TipoToken tipo);
+    //Método utilitário para converter TipoToken para a struct DataType da AST
+    DataType mapearTipoBasico();
 
     //Estrutura global do programa
     std::unique_ptr<FunctionNode> parseDeclaracaoFuncao();
     std::unique_ptr<FunctionNode> parseFuncaoMain();
+    std::unique_ptr<StatementNode> parseDeclaracaoStructClasse();
     
     //Funções e parâmetros
     std::vector<Parameter> parseParametros();
@@ -80,4 +81,5 @@ private:
     std::unique_ptr<ExpressionNode> parseExprAritmetica();
     std::unique_ptr<ExpressionNode> parseTermo();
     std::unique_ptr<ExpressionNode> parseFator();
+    std::unique_ptr<ExpressionNode> parseAcessoMembro(std::unique_ptr<ExpressionNode> objeto);
 };
