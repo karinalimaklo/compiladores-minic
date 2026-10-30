@@ -144,6 +144,10 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::Virg:         return "Virg";
         case TipoToken::PontoVirg:    return "PontoVirg";
         case TipoToken::FimArquivo:   return "FimArquivo";
+        case TipoToken::PalClass:     return "PalClass";
+        case TipoToken::PalStruct:    return "PalStruct";
+        case TipoToken::Ponto:        return "Ponto";
+        case TipoToken::Seta:         return "Seta";
     }
     return "?";
 }

@@ -93,6 +93,10 @@ std::vector<EntradaLexica> criarTabelaTokens() {
     tabela.push_back({TipoToken::Interrogacao, textoFixo("?")});
     tabela.push_back({TipoToken::DoisPontos,   textoFixo(":")});
 
+    // operadores de acesso a membros (Classe/Struct/Ponteiro)
+    tabela.push_back({TipoToken::Ponto, textoFixo(".")});
+    tabela.push_back({TipoToken::Seta, textoFixo("->")});
+
     // pontuacao
     tabela.push_back({TipoToken::ColEsquerda,  textoFixo("(")});
     tabela.push_back({TipoToken::ColDireita,   textoFixo(")")});
@@ -112,6 +116,8 @@ const std::unordered_map<std::string, TipoToken>& palavrasChave() {
         {"int", TipoToken::PalInt},       {"char", TipoToken::PalChar},
         {"double", TipoToken::PalDouble}, {"bool", TipoToken::PalBool},
         {"string", TipoToken::PalString}, {"void", TipoToken::PalVoid},
+        //orientação a objetos
+        {"class", TipoToken::PalClass},   {"struct", TipoToken::PalStruct},
         // literal_bool
         {"true", TipoToken::PalTrue},     {"false", TipoToken::PalFalse},
         // comandos
