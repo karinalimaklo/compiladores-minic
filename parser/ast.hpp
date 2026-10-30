@@ -5,19 +5,45 @@
 #include <memory>
 #include "../lexer/token.hpp"
 
-//Forward Declarations de nós base para permitir referências cruzadas
+//Forward Declarations
 class ASTNode;
 class ExpressionNode;
 class StatementNode;
 class FunctionNode;
+class LiteralNode;
+class IdentifierNode;
+class BinaryExprNode;
+class UnaryExprNode;
+class IncDecExprNode;
+class FunctionCallExprNode;
+class BlockStmtNode;
+class VariableDeclStmtNode;
+class AssignmentStmtNode;
+class IfStmtNode;
+class WhileStmtNode;
+class BreakStmtNode;
+class ContinueStmtNode;
+class ReturnStmtNode;
+class ExpressionStmtNode;
+class ProgramNode;
+class StructClassDeclStmtNode;
+class MemberAccessExprNode;
 
 //Enumerações auxiliares para representar tipos de dados e operadores
-enum class DataType {
+enum class DataTypeKind {
     Int,
     Bool,
     Char,
     Double,
-    Void
+    Void,
+    Pointer,
+    Class
+};
+
+struct DataType { //struct para saber qual o tipo de dado, o nível do ponteiro e o nome da classe se for uma
+    DataTypeKind kind;
+    std::string name; //Preenchido se for definido pelo usuário 
+    int pointerLevel = 0; //0 = comum, 1 = *, 2 = **, etc.
 };
 
 enum class BinaryOp {
@@ -29,7 +55,9 @@ enum class BinaryOp {
 
 enum class UnaryOp {
     LogicalNot,
-    Negate
+    Negate,
+    AddressOf, //&x
+    Deref //*p
 };
 
 enum class IncDecOp {
@@ -37,14 +65,56 @@ enum class IncDecOp {
     Decrement  //--
 };
 
+
+//Classe base abstrata do visitor
+class ASTVisitor {
+public:
+    virtual ~ASTVisitor() = default;
+
+    //Métodos de visita para expressões
+    virtual void visit(LiteralNode* node) = 0;
+    virtual void visit(IdentifierNode* node) = 0;
+    virtual void visit(BinaryExprNode* node) = 0;
+    virtual void visit(UnaryExprNode* node) = 0;
+    virtual void visit(IncDecExprNode* node) = 0;
+    virtual void visit(FunctionCallExprNode* node) = 0;
+
+    //Métodos de visita para comandos
+    virtual void visit(BlockStmtNode* node) = 0;
+    virtual void visit(VariableDeclStmtNode* node) = 0;
+    virtual void visit(AssignmentStmtNode* node) = 0;
+    virtual void visit(IfStmtNode* node) = 0;
+    virtual void visit(WhileStmtNode* node) = 0;
+    virtual void visit(BreakStmtNode* node) = 0;
+    virtual void visit(ContinueStmtNode* node) = 0;
+    virtual void visit(ReturnStmtNode* node) = 0;
+    virtual void visit(ExpressionStmtNode* node) = 0;
+
+    //Métodos de visita para estruturas de nível superior
+    virtual void visit(FunctionNode* node) = 0;
+    virtual void visit(ProgramNode* node) = 0;
+
+    //Métodos para orientação a objetos
+    virtual void visit(StructClassDeclStmtNode* node) = 0;
+    virtual void visit(MemberAccessExprNode* node) = 0;
+};
+
 class ASTNode { //Nó base
 public:
     virtual ~ASTNode() = default;
+    virtual void accept(ASTVisitor* visitor) = 0; 
 };
 
 class ExpressionNode : public ASTNode { //Expressões
 public:
     ~ExpressionNode() override = default;
+    //herdado: virtual void accept(ASTVisitor* visitor) = 0;
+};
+
+class StatementNode : public ASTNode { // Comandos
+public:
+    ~StatementNode() override = default;
+    //herdado: virtual void accept(ASTVisitor* visitor) = 0;
 };
 
 //Literais (Ex: 42, 3.14, 'a', true)
@@ -53,14 +123,15 @@ public:
     DataType tipoLiteral;
     std::string valor;
     LiteralNode(DataType tipo, std::string val) : tipoLiteral(tipo), valor(std::move(val)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Identificador (Variáveis)
 class IdentifierNode : public ExpressionNode {
 public:
     std::string nome;
-
     explicit IdentifierNode(std::string nome) : nome(std::move(nome)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Operações binárias (Aritméticas, Relacionais, Igualdade, Lógicas)
@@ -72,6 +143,8 @@ public:
 
     BinaryExprNode(BinaryOp op, std::unique_ptr<ExpressionNode> esq, std::unique_ptr<ExpressionNode> dir)
         : op(op), esquerda(std::move(esq)), direita(std::move(dir)) {}
+    
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Operações unárias (Ex: !fator, -fator)
@@ -82,6 +155,7 @@ public:
 
     UnaryExprNode(UnaryOp op, std::unique_ptr<ExpressionNode> fat)
         : op(op), fator(std::move(fat)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Incremento e decremento (Ex: id++, id--)
@@ -92,6 +166,7 @@ public:
 
     IncDecExprNode(std::string id, IncDecOp op)
         : identificador(std::move(id)), op(op) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Chamada de função (Ex: foo(expr1, expr2))
@@ -102,11 +177,39 @@ public:
 
     FunctionCallExprNode(std::string nome, std::vector<std::unique_ptr<ExpressionNode>> args)
         : nomeFuncao(std::move(nome)), argumentos(std::move(args)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
-class StatementNode : public ASTNode { //Comandos
+//Acesso a membro de Classe/Struct (Ex: objeto.campo ou ponteiro->campo)
+class MemberAccessExprNode : public ExpressionNode {
 public:
-    ~StatementNode() override = default;
+    std::unique_ptr<ExpressionNode> objeto;
+    std::string nomeMembro;
+    bool isArrow; //true se for '->', false se for '.'
+
+    MemberAccessExprNode(std::unique_ptr<ExpressionNode> obj, std::string membro, bool arrow)
+        : objeto(std::move(obj)), nomeMembro(std::move(membro)), isArrow(arrow) {}
+
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); }
+};
+
+//Atributo interno de uma Struct/Classe
+struct FieldDeclarator {
+    DataType tipo;
+    std::string nome;
+};
+
+//Declaração de Struct ou Classe (Ex: struct Nome { campos };)
+class StructClassDeclStmtNode : public StatementNode {
+public:
+    std::string nome;
+    std::vector<FieldDeclarator> campos;
+    bool isClass; //true se foi declarada com 'class', false se 'struct'
+
+    StructClassDeclStmtNode(std::string nome, std::vector<FieldDeclarator> campos, bool isClass)
+        : nome(std::move(nome)), campos(std::move(campos)), isClass(isClass) {}
+
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); }
 };
 
 //Bloco de comandos (Ex: { comando* })
@@ -116,6 +219,7 @@ public:
 
     explicit BlockStmtNode(std::vector<std::unique_ptr<StatementNode>> cmds)
         : comandos(std::move(cmds)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Declaração de variável única
@@ -132,6 +236,7 @@ public:
 
     VariableDeclStmtNode(DataType tipo, std::vector<VariableDeclarator> decls)
         : tipoBasico(tipo), declaradores(std::move(decls)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Atribuição (Ex: x = expressao;)
@@ -142,6 +247,7 @@ public:
 
     AssignmentStmtNode(std::string id, std::unique_ptr<ExpressionNode> expr)
         : identificador(std::move(id)), expressao(std::move(expr)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Comando condicional IfElse
@@ -153,6 +259,7 @@ public:
 
     IfStmtNode(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> th, std::unique_ptr<StatementNode> el = nullptr)
         : condicao(std::move(cond)), comandoThen(std::move(th)), comandoElse(std::move(el)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Comando While
@@ -163,11 +270,20 @@ public:
 
     WhileStmtNode(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> body)
         : condicao(std::move(cond)), comandoBody(std::move(body)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Comandos de controle (Break e Continue)
-class BreakStmtNode : public StatementNode {};
-class ContinueStmtNode : public StatementNode {};
+class BreakStmtNode : public StatementNode {
+public:
+
+void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
+};
+class ContinueStmtNode : public StatementNode {
+public:
+
+void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
+};
 
 //Retorno
 class ReturnStmtNode : public StatementNode {
@@ -176,6 +292,7 @@ public:
 
     explicit ReturnStmtNode(std::unique_ptr<ExpressionNode> expr = nullptr)
         : expressao(std::move(expr)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Comando de Expressão descartada (Ex: expressao;)
@@ -185,6 +302,7 @@ public:
 
     explicit ExpressionStmtNode(std::unique_ptr<ExpressionNode> expr)
         : expressao(std::move(expr)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Parâmetro de função (Ex: int x)
@@ -203,14 +321,19 @@ public:
 
     FunctionNode(DataType tipo, std::string nome, std::vector<Parameter> params, std::unique_ptr<BlockStmtNode> corpo)
         : tipoRetorno(tipo), nome(std::move(nome)), parametros(std::move(params)), bloco(std::move(corpo)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
 //Raiz do programa 
 class ProgramNode : public ASTNode {
 public:
+    std::vector<std::unique_ptr<StatementNode>> classes_structs; 
     std::vector<std::unique_ptr<FunctionNode>> funcoes;
     std::unique_ptr<FunctionNode> funcaoMain;
 
-    ProgramNode(std::vector<std::unique_ptr<FunctionNode>> funcs, std::unique_ptr<FunctionNode> mainFunc)
-        : funcoes(std::move(funcs)), funcaoMain(std::move(mainFunc)) {}
+    ProgramNode(std::vector<std::unique_ptr<StatementNode>> classes,
+                std::vector<std::unique_ptr<FunctionNode>> funcs, 
+                std::unique_ptr<FunctionNode> mainFunc)
+        : classes_structs(std::move(classes)), funcoes(std::move(funcs)), funcaoMain(std::move(mainFunc)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
