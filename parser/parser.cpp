@@ -42,16 +42,40 @@ bool Parser::match(const std::vector<TipoToken>& tipos) {
     return false;
 }
 
-DataType Parser::mapearTipoBasico(TipoToken tipo) {
-    switch (tipo) {
-        case TipoToken::PalInt:    return DataType::Int;
-        case TipoToken::PalBool:   return DataType::Bool;
-        case TipoToken::PalChar:   return DataType::Char;
-        case TipoToken::PalDouble: return DataType::Double;
-        case TipoToken::PalVoid:   return DataType::Void;
-        default:
-            throw ParserException("Erro Sintatico: Tipo de dado invalido ou nao suportado.", espiar().posicao);
+DataType Parser::mapearTipoBasico() {
+    DataType tipo;
+    
+    //Identifica a base do tipo (tipo_base ::= "int" | "bool" | "char" | "double" | identificador)
+    if (checar(TipoToken::PalInt)) {
+        tipo.kind = DataTypeKind::Int;
+        avancar();
+    } else if (checar(TipoToken::PalBool)) {
+        tipo.kind = DataTypeKind::Bool;
+        avancar();
+    } else if (checar(TipoToken::PalChar)) {
+        tipo.kind = DataTypeKind::Char;
+        avancar();
+    } else if (checar(TipoToken::PalDouble)) {
+        tipo.kind = DataTypeKind::Double;
+        avancar();
+    } else if (checar(TipoToken::PalVoid)) {
+        tipo.kind = DataTypeKind::Void;
+        avancar();
+    } else if (checar(TipoToken::Ident)) {
+        //Se for um identificador no lugar de um tipo, significa que é uma Classe/Struct
+        tipo.kind = DataTypeKind::Class;
+        tipo.name = avancar().lexeme; //Guarda o nome da classe (ex: "Pessoa")
+    } else {
+        throw ParserException("Erro Sintatico: Tipo de dado invalido ou nao suportado.", espiar().posicao);
     }
+
+    //Captura o nível do ponteiro (Consome todos os '*' seguidos, ex: int** -> level 2) (ponteiro_opt ::= ("*")*)
+    while (checar(TipoToken::Star)) {
+        avancar();
+        tipo.pointerLevel++;
+    }
+
+    return tipo;
 }
 
 //Processa a lista de parâmetros: parametro ("," parametro)*
@@ -67,18 +91,13 @@ std::vector<Parameter> Parser::parseParametros() {
 
 //Processa um único parâmetro: tipo_basico identificador
 Parameter Parser::parseParametro() {
-    if (!checar(TipoToken::PalInt) && !checar(TipoToken::PalChar) && 
-        !checar(TipoToken::PalDouble) && !checar(TipoToken::PalBool)) {
-        throw ParserException("Erro Sintatico: Esperado tipo de dado basico para o parametro.", espiar().posicao);
-    }
-    
-    DataType tipo = mapearTipoBasico(avancar().tipo);
+    DataType tipo = mapearTipoBasico();
     Token idToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado identificador para o parametro.");
     
     return Parameter{tipo, idToken.lexeme};
 }
 
-//Processa os argumentos passados em chamadas: expressao ("," expressao)*
+//Processa os argumentos passados em chamadas: argumentos ::= expressao ("," expressao)*
 std::vector<std::unique_ptr<ExpressionNode>> Parser::parseArgumentos() {
     std::vector<std::unique_ptr<ExpressionNode>> lista;
     lista.push_back(parseExpressao());
@@ -89,12 +108,20 @@ std::vector<std::unique_ptr<ExpressionNode>> Parser::parseArgumentos() {
     return lista;
 }
 
-//Ponto de entrada principal: programa ::= declaracao_funcao* funcao_main
+//Ponto de entrada principal: programa ::= elemento_global* funcao_main
 std::unique_ptr<ProgramNode> Parser::parse() {
+    std::vector<std::unique_ptr<StatementNode>> classes;
     std::vector<std::unique_ptr<FunctionNode>> funcoes;
     std::unique_ptr<FunctionNode> funcaoMain = nullptr;
 
     while (!fim()) {
+
+        //Se encontrar uma classe ou struct na raiz do arquivo
+        if (checar(TipoToken::PalClass) || checar(TipoToken::PalStruct)) {
+            classes.push_back(parseDeclaracaoStructClasse()); 
+            continue;
+        }
+
         //Se o tipo for 'int' e o proximo token for 'main', tem que ser a main
         if (checar(TipoToken::PalInt) && 
             (m_atual + 1 < m_tokens.size() && m_tokens[m_atual + 1].lexeme == "main")) {
@@ -109,33 +136,64 @@ std::unique_ptr<ProgramNode> Parser::parse() {
         throw ParserException("Erro Sintatico: Funcao obrigatoria 'int main()' nao encontrada ou fora de posicao.", espiar().posicao);
     }
 
-    return std::make_unique<ProgramNode>(std::move(funcoes), std::move(funcaoMain));
+    return std::make_unique<ProgramNode>(std::move(classes), std::move(funcoes), std::move(funcaoMain));
 }
 
-//Processa uma função comum: tipo_retorno identificador "(" parametros? ")" bloco
+//Processa uma função comum: declaracao_funcao ::= tipo_retorno identificador "(" parametros? ")" bloco
 std::unique_ptr<FunctionNode> Parser::parseDeclaracaoFuncao() {
-    if (!checar(TipoToken::PalInt) && !checar(TipoToken::PalChar) && 
-        !checar(TipoToken::PalDouble) && !checar(TipoToken::PalBool) && !checar(TipoToken::PalVoid)) {
-        throw ParserException("Erro Sintatico: Esperado tipo de retorno valido para a funcao.", espiar().posicao);
-    }
-    
-    DataType tipoRet = mapearTipoBasico(avancar().tipo);
+    DataType tipoRet = mapearTipoBasico();
     Token idToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado identificador com o nome da funcao.");
     
     consumir(TipoToken::ColEsquerda, "Erro Sintatico: Esperado '(' apos o nome da funcao.");
     std::vector<Parameter> params;
     if (!checar(TipoToken::ColDireita)) {
         params = parseParametros();
-    }
+    } //lembrar de fazer mudança
     consumir(TipoToken::ColDireita, "Erro Sintatico: Esperado ')' apos a lista de parametros.");
 
-    //Chama o analisador de bloco de comandos: { comando* }
+    //Chama o analisador de bloco de comandos: bloco ::= "{" comando* "}"
     std::unique_ptr<BlockStmtNode> corpo = parseBloco();
 
     return std::make_unique<FunctionNode>(tipoRet, idToken.lexeme, std::move(params), std::move(corpo));
 }
 
-//Processa especificamente a main: "int" "main" "(" ")" bloco
+// Processa a declaração de uma Struct ou Classe: declaracao_struct_classe ::= ("struct" | "class") identificador "{" campo_atributo* "}" ";"
+std::unique_ptr<StatementNode> Parser::parseDeclaracaoStructClasse() {
+    //Identifica se é class ou struct e consome o token correspondente
+    bool isClass = false;
+    if (match({TipoToken::PalClass})) {
+        isClass = true;
+    } else {
+        consumir(TipoToken::PalStruct, "Erro Sintatico: Esperado 'class' ou 'struct'.");
+    }
+
+    //Consome o nome da Classe/Struct
+    Token idToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado nome para a classe ou struct.");
+
+    //Abre o escopo interno de atributos
+    consumir(TipoToken::ChavesEsq, "Erro Sintatico: Esperado '{' para iniciar o corpo da classe ou struct.");
+    std::vector<FieldDeclarator> campos;
+
+    //Loop para ler todos os atributos internos até encontrar o fechamento de '}'
+    while (!checar(TipoToken::ChavesDir) && !fim()) {
+        //Coleta o tipo do atributo (primitivo, ponteiro ou outra classe)
+        DataType tipoMembro = mapearTipoBasico();
+        
+        //Coleta o nome do atributo
+        Token nomeMembroToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado nome para o atributo.");
+        consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o nome do atributo.");
+        
+        campos.push_back(FieldDeclarator{tipoMembro, nomeMembroToken.lexeme});
+    }
+
+    consumir(TipoToken::ChavesDir, "Erro Sintatico: Esperado '}' para fechar o corpo da classe ou struct.");
+    consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o fechamento da classe ou struct.");
+
+    return std::make_unique<StructClassDeclStmtNode>(idToken.lexeme, std::move(campos), isClass);
+}
+
+
+//Processa especificamente a main: funcao_main ::= "int" "main" "(" ")" bloco
 std::unique_ptr<FunctionNode> Parser::parseFuncaoMain() {
     consumir(TipoToken::PalInt, "Erro Sintatico: O tipo de retorno da funcao main deve ser obrigatoriamente 'int'.");
     
@@ -149,7 +207,9 @@ std::unique_ptr<FunctionNode> Parser::parseFuncaoMain() {
 
     std::unique_ptr<BlockStmtNode> corpo = parseBloco();
 
-    return std::make_unique<FunctionNode>(DataType::Int, "main", std::vector<Parameter>{}, std::move(corpo));
+    //Cria o tipo int para o retorno da main usando a struct nova
+    DataType tipoRetornoMain{DataTypeKind::Int, "", 0};
+    return std::make_unique<FunctionNode>(tipoRetornoMain, "main", std::vector<Parameter>{}, std::move(corpo));
 }
 
 //Processa um bloco fechado: bloco ::= "{" comando* "}"
@@ -227,8 +287,27 @@ std::unique_ptr<StatementNode> Parser::parseComandoReturn() {
 std::unique_ptr<StatementNode> Parser::parseComando() {
     //Se começar com uma palavra-chave de tipo básico, é uma declaração de variável
     if (checar(TipoToken::PalInt) || checar(TipoToken::PalBool) || 
-        checar(TipoToken::PalChar) || checar(TipoToken::PalDouble)) {
+        checar(TipoToken::PalChar) || checar(TipoToken::PalDouble)){
         return parseDeclaracaoVariavel();
+    }
+
+    //Resolve a ambiguidade do identificador (Classe vs Variável/Função)
+    if (checar(TipoToken::Ident)) {
+        bool ehDeclaracao = false;
+        
+        //Verifica se há tokens suficientes à frente para espiar
+        if (m_atual + 1 < m_tokens.size()) {
+            TipoToken proximo = m_tokens[m_atual + 1].tipo;
+            
+            //Se for "Ident Ident" (ex: Pessoa p;) ou "Ident *" (ex: Pessoa* p;)
+            if (proximo == TipoToken::Ident || proximo == TipoToken::Star) {
+                ehDeclaracao = true;
+            }
+        }
+        
+        if (ehDeclaracao) {
+            return parseDeclaracaoVariavel();
+        }
     }
     
     //Encaminha para os comandos de controle correspondentes
@@ -244,10 +323,10 @@ std::unique_ptr<StatementNode> Parser::parseComando() {
     return parseAtribuicaoOuExpressaoStmt();
 }
 
-//Processa variáveis: tipo_basico declarador ("," declarador)* ";"
+//Processa variáveis: declaracao_variavel ::= tipo_basico declarador ("," declarador)* ";"
 std::unique_ptr<StatementNode> Parser::parseDeclaracaoVariavel() {
     //Coleta o tipo básico (int, bool, char, double) e avança
-    DataType tipo = mapearTipoBasico(avancar().tipo);
+    DataType tipo = mapearTipoBasico();
     std::vector<VariableDeclarator> dees;
 
     //Processa pelo menos um declarador, repetindo enquanto houver vírgula
@@ -267,7 +346,7 @@ std::unique_ptr<StatementNode> Parser::parseDeclaracaoVariavel() {
     return std::make_unique<VariableDeclStmtNode>(tipo, std::move(dees));
 }
 
-//Resolve a ambiguidade do espiar: atribuição (id = expr;) e expressão isolada (id++; ou foo();)
+//Resolve a ambiguidade do espiar: atribuição (id = expr;) e expressão isolada (id++; ou foo();) (comando ::= atribuicao e comando ::= expressao ";")
 std::unique_ptr<StatementNode> Parser::parseAtribuicaoOuExpressaoStmt() {
     //Se o token atual for um identificador e o próximo for um '='
     if (checar(TipoToken::Ident) && 
@@ -294,7 +373,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExpressao() {
     return parseExpressaoOr();
 }
 
-//Processa o operador OU lógico: expressao_and ( "||" expressao_and )*
+//Processa o operador OU lógico: expressao_or ::= expressao_and ( op_logico_or expressao_and )*
 std::unique_ptr<ExpressionNode> Parser::parseExpressaoOr() {
     std::unique_ptr<ExpressionNode> expr = parseExpressaoAnd();
     
@@ -306,7 +385,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExpressaoOr() {
     return expr;
 }
 
-//Processa o operador E lógico: expressao_igualdade ( "&&" expressao_igualdade )*
+//Processa o operador E lógico: expressao_and ::= expressao_igualdade ( op_logico_and expressao_igualdade )*
 std::unique_ptr<ExpressionNode> Parser::parseExpressaoAnd() {
     std::unique_ptr<ExpressionNode> expr = parseExpressaoIgualdade();
     
@@ -317,7 +396,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExpressaoAnd() {
     return expr;
 }
 
-//Processa igualdades: expressao_relacional ( ("==" | "!=") expressao_relacional )*
+//Processa igualdades: expressao_igualdade ::= expressao_relacional ( op_igualdade expressao_relacional )*
 std::unique_ptr<ExpressionNode> Parser::parseExpressaoIgualdade() {
     std::unique_ptr<ExpressionNode> expr = parseExpressaoRelacional();
     
@@ -331,7 +410,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExpressaoIgualdade() {
     return expr;
 }
 
-//Processa relacionais: expr_aritmetica ( ("<" | "<=" | ">" | ">=") expr_aritmetica )*
+//Processa relacionais: expressao_relacional ::= expr_aritmetica ( op_relacional expr_aritmetica )*
 std::unique_ptr<ExpressionNode> Parser::parseExpressaoRelacional() {
     std::unique_ptr<ExpressionNode> expr = parseExprAritmetica();
     
@@ -350,7 +429,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExpressaoRelacional() {
     return expr;
 }
 
-//Processa somas e subtrações: termo ( ("+" | "-") termo )*
+//Processa somas e subtrações: expr_aritmetica ::= termo ( op_aditivo termo )*
 std::unique_ptr<ExpressionNode> Parser::parseExprAritmetica() {
     std::unique_ptr<ExpressionNode> expr = parseTermo();
     
@@ -364,7 +443,7 @@ std::unique_ptr<ExpressionNode> Parser::parseExprAritmetica() {
     return expr;
 }
 
-//Processa multiplicações, divisões e restos: fator ( ("*" | "/" | "%") fator )*
+//Processa multiplicações, divisões e restos: termo ::= fator ( op_multiplicativo fator )*
 std::unique_ptr<ExpressionNode> Parser::parseTermo() {
     std::unique_ptr<ExpressionNode> expr = parseFator();
     
@@ -382,13 +461,24 @@ std::unique_ptr<ExpressionNode> Parser::parseTermo() {
     return expr;
 }
 
+// Processa fatores atômicos e cadeias de acesso: fator ::= fator_nucleo (op_acesso identificador)*
 std::unique_ptr<ExpressionNode> Parser::parseFator() {
     //Literais atômicos
-    if (match({TipoToken::IntLit}))    return std::make_unique<LiteralNode>(DataType::Int,    anterior().lexeme);
-    if (match({TipoToken::DoubleLit})) return std::make_unique<LiteralNode>(DataType::Double, anterior().lexeme);
-    if (match({TipoToken::CharLit}))   return std::make_unique<LiteralNode>(DataType::Char,   anterior().lexeme);
-    if (match({TipoToken::PalTrue}))   return std::make_unique<LiteralNode>(DataType::Bool,   "true");
-    if (match({TipoToken::PalFalse}))  return std::make_unique<LiteralNode>(DataType::Bool,   "false");
+    if (match({TipoToken::IntLit})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Int, "", 0}, anterior().lexeme);
+    }
+    if (match({TipoToken::DoubleLit})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Double, "", 0}, anterior().lexeme);
+    }
+    if (match({TipoToken::CharLit})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Char, "", 0}, anterior().lexeme);
+    }
+    if (match({TipoToken::PalTrue})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Bool, "", 0}, "true");
+    }
+    if (match({TipoToken::PalFalse})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Bool, "", 0}, "false");
+    }
 
     //Operadores unários
     if (match({TipoToken::Not})) {
@@ -407,9 +497,10 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
         return expr;
     }
 
-    //Casos que iniciam com identificador (Variavel, chamada ou incremento)
+     //Casos que iniciam com identificador (Variavel, chamada ou incremento)
     if (match({TipoToken::Ident})) {
         Token idToken = anterior();
+        std::unique_ptr<ExpressionNode> nodoBase = nullptr;
 
         //Subregra: chamada_funcao ::= identificador "(" argumentos? ")"
         if (match({TipoToken::ColEsquerda})) {
@@ -418,21 +509,44 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
                 args = parseArgumentos();
             }
             consumir(TipoToken::ColDireita, "Erro Sintatico: Esperado ')' apos os argumentos da funcao.");
-            return std::make_unique<FunctionCallExprNode>(idToken.lexeme, std::move(args));
+            nodoBase = std::make_unique<FunctionCallExprNode>(idToken.lexeme, std::move(args));
         }
-
-        //Subregra: incremento/decremento ::= identificador "++" | identificador "--"
-        if (match({TipoToken::PlusPLus})) {
-            return std::make_unique<IncDecExprNode>(idToken.lexeme, IncDecOp::Increment);
+        //Subregra: incremento ::= identificador "++" | identificador "--"
+        else if (match({TipoToken::PlusPLus})) {
+            nodoBase = std::make_unique<IncDecExprNode>(idToken.lexeme, IncDecOp::Increment);
         }
-        if (match({TipoToken::MinMin})) {
-            return std::make_unique<IncDecExprNode>(idToken.lexeme, IncDecOp::Decrement);
+        else if (match({TipoToken::MinMin})) {
+            nodoBase = std::make_unique<IncDecExprNode>(idToken.lexeme, IncDecOp::Decrement);
         }
-
         //Caso base: Identificador puro (Uso de variável simples)
-        return std::make_unique<IdentifierNode>(idToken.lexeme);
+        else {
+            nodoBase = std::make_unique<IdentifierNode>(idToken.lexeme);
+        }
+
+        //Após resolver o núcleo do fator (variável, chamada ou incremento),
+        //passamos ele pelo filtro de acesso a membros para checar se há '.' ou '->' conjugados!
+        return parseAcessoMembro(std::move(nodoBase));
     }
 
     //Se o espiar não casou com nenhuma regra válida de fator
     throw ParserException("Erro Sintatico: Expressao invalida, operando ou token inesperado.", espiar().posicao);
+}
+
+//Processa a cadeia em loop de acessos: fator ::= fator_nucleo (op_acesso identificador)*
+std::unique_ptr<ExpressionNode> Parser::parseAcessoMembro(std::unique_ptr<ExpressionNode> objeto) {
+    std::unique_ptr<ExpressionNode> expr = std::move(objeto);
+
+    //Enquanto o próximo token for um ponto '.' ou uma seta '->'
+    while (checar(TipoToken::Ponto) || checar(TipoToken::Seta)) {
+        Token opToken = avancar(); // Consome o '.' ou '->'
+        bool isArrow = (opToken.tipo == TipoToken::Seta);
+
+        //O que vem obrigatoriamente depois do operador é o nome do atributo/campo
+        Token membroToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado nome do membro apos o operador de acesso.");
+
+        //Cria o nó de acesso empilhando a expressão anterior como a subárvore da esquerda
+        expr = std::make_unique<MemberAccessExprNode>(std::move(expr), membroToken.lexeme, isArrow);
+    }
+
+    return expr;
 }
