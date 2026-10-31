@@ -348,24 +348,22 @@ std::unique_ptr<StatementNode> Parser::parseDeclaracaoVariavel() {
 
 //Resolve a ambiguidade do espiar: atribuição (id = expr;) e expressão isolada (id++; ou foo();) (comando ::= atribuicao e comando ::= expressao ";")
 std::unique_ptr<StatementNode> Parser::parseAtribuicaoOuExpressaoStmt() {
-    //Se o token atual for um identificador e o próximo for um '='
-    if (checar(TipoToken::Ident) && 
-        (m_atual + 1 < m_tokens.size() && m_tokens[m_atual + 1].tipo == TipoToken::Assign)) {
-        
-        Token idToken = avancar(); //Consome o identificador
-        avancar();                 //Consome o '='
-        
-        std::unique_ptr<ExpressionNode> expr = parseExpressao();
+    //Faz o parsing da expressão da esquerda normalmente (consome "x", "*p", "v.x" ou "ptr->x")
+    std::unique_ptr<ExpressionNode> exprEsq = parseExpressao();
+
+    //Se o próximo token for um '='
+    if (match({TipoToken::Assign})) {
+        //Faz o parsing da expressão do lado direito
+        std::unique_ptr<ExpressionNode> exprDir = parseExpressao();
         consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' ao final da atribuicao.");
         
-        return std::make_unique<AssignmentStmtNode>(idToken.lexeme, std::move(expr));
+        //Cria o nó passando as duas expressões completas
+        return std::make_unique<AssignmentStmtNode>(std::move(exprEsq), std::move(exprDir));
     }
 
-    //Se não for uma atribuição direta com '=', cai obrigatoriamente na regra de expressão pura (Ex: x++; ou chamar_funcao();)
-    std::unique_ptr<ExpressionNode> expr = parseExpressao();
+    //Se não veio um '=', era apenas uma expressão pura (ex: id++; ou foo();)
     consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' ao final da expressao.");
-    
-    return std::make_unique<ExpressionStmtNode>(std::move(expr));
+    return std::make_unique<ExpressionStmtNode>(std::move(exprEsq));
 }
 
 //Ponto de entrada das expressões: expressao ::= expressao_or
@@ -489,7 +487,14 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
         std::unique_ptr<ExpressionNode> fat = parseFator();
         return std::make_unique<UnaryExprNode>(UnaryOp::Negate, std::move(fat));
     }
-
+    if (match({TipoToken::Address})) { 
+        std::unique_ptr<ExpressionNode> fat = parseFator();
+        return std::make_unique<UnaryExprNode>(UnaryOp::AddressOf, std::move(fat));
+    }
+    if (match({TipoToken::Star})) { 
+        std::unique_ptr<ExpressionNode> fat = parseFator();
+        return std::make_unique<UnaryExprNode>(UnaryOp::Deref, std::move(fat));
+    }
     //Expressões: "(" expressao ")"
     if (match({TipoToken::ColEsquerda})) {
         std::unique_ptr<ExpressionNode> expr = parseExpressao();
