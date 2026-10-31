@@ -128,6 +128,7 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::Ge:           return "Ge";
         case TipoToken::Lt:           return "Lt";
         case TipoToken::Le:           return "Le";
+        case TipoToken::Address:      return "Address";
         case TipoToken::AndAnd:       return "AndAnd";
         case TipoToken::OrOr:         return "OrOr";
         case TipoToken::Not:          return "Not";
