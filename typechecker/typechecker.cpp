@@ -119,6 +119,12 @@ void TypeChecker::visit(IdentifierNode* node) {
 
 //Função auxiliar privada para comparar se dois tipos são exatamente iguais
 bool tiposSaoIguais(const DataType& t1, const DataType& t2) {
+    if (t1.kind == DataTypeKind::Void && t1.pointerLevel >= 1) {
+        return t2.pointerLevel >= 1;
+    }
+    if (t2.kind == DataTypeKind::Void && t2.pointerLevel >= 1) {
+        return t1.pointerLevel >= 1;
+    }
     if (t1.kind != t2.kind) return false;
     if (t1.pointerLevel != t2.pointerLevel) return false;
     if (t1.kind == DataTypeKind::Class && t1.name != t2.name) return false;
