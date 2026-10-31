@@ -31,11 +31,17 @@ set(TYPECHECKER_SOURCES
     typechecker/typechecker.cpp
 )
 
+set(INTERPRETER_SOURCES
+    interpreter/environment.cpp
+    interpreter/interpreter.cpp
+)
+
 # 3. Criar a biblioteca estática com o compilador completo
 add_library(compiler_core STATIC 
     ${LEXER_SOURCES} 
     ${PARSER_SOURCES}
     ${TYPECHECKER_SOURCES}
+    ${INTERPRETER_SOURCES}
 )
 
 # Indicar onde procurar as pastas de cabeçalhos (.hpp)
