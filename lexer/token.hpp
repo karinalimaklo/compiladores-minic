@@ -18,7 +18,7 @@ enum class TipoToken {
     Plus, Min, Star, Div, Percent,
     Assign, PlusAssign, MinAssign,
     Eq, NotEq, Gt, Ge, Lt, Le,
-    AndAnd, OrOr, Not,
+    AndAnd, OrOr, Not, Address,
     PlusPLus, MinMin,
     Interrogacao, DoisPontos,  // ? e : (expressao ternaria)
     Ponto, Seta, //objeto.componente, ponteiro->componente
