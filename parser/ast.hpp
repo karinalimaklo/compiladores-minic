@@ -242,11 +242,11 @@ public:
 //Atribuição (Ex: x = expressao;)
 class AssignmentStmtNode : public StatementNode {
 public:
-    std::string identificador;
-    std::unique_ptr<ExpressionNode> expressao;
+    std::unique_ptr<ExpressionNode> esquerda; //Aceita qualquer expressão válida à esquerda do '='
+    std::unique_ptr<ExpressionNode> direita;  
 
-    AssignmentStmtNode(std::string id, std::unique_ptr<ExpressionNode> expr)
-        : identificador(std::move(id)), expressao(std::move(expr)) {}
+    AssignmentStmtNode(std::unique_ptr<ExpressionNode> esq, std::unique_ptr<ExpressionNode> dir)
+        : esquerda(std::move(esq)), direita(std::move(dir)) {}
     void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 
