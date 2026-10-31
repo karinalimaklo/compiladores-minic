@@ -477,6 +477,9 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
     if (match({TipoToken::PalFalse})) {
         return std::make_unique<LiteralNode>(DataType{DataTypeKind::Bool, "", 0}, "false");
     }
+    if (match({TipoToken::PalNullptr})) {
+        return std::make_unique<LiteralNode>(DataType{DataTypeKind::Void, "", 1}, "nullptr");
+    }
 
     //Operadores unários
     if (match({TipoToken::Not})) {
