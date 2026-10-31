@@ -404,21 +404,17 @@ void TypeChecker::visit(VariableDeclStmtNode* node) {
 
 //Valida a atribuição de valores: atribuicao ::= identificador "=" expressao ";"
 void TypeChecker::visit(AssignmentStmtNode* node) {
-    //Busca a variável na tabela de símbolos para garantir que ela existe e saber seu tipo
-    auto encontrado = m_tabVariaveis.buscar(node->identificador);
-    if (!encontrado.has_value()) {
-        throw std::runtime_error("Erro Semantico: Variavel '" + node->identificador + "' nao declarada neste escopo.");
-    }
+    //Avalia o lado esquerdo da atribuição recursivamente através do Visitor
+    node->esquerda->accept(this);
+    DataType tipoEsquerda = m_tipoExprAtual;
 
-    DataType tipoVariavel = encontrado.value();
+    //Avalia o lado direito da atribuição
+    node->direita->accept(this);
+    DataType tipoDireita = m_tipoExprAtual;
 
-    //Avalia a expressão do lado direito para descobrir o seu tipo
-    node->expressao->accept(this);
-    DataType tipoExpressao = m_tipoExprAtual;
-
-    //Garante que ambos os tipos sejam compatíveis para a atribuição
-    if (!tiposSaoIguais(tipoVariavel, tipoExpressao)) {
-        throw std::runtime_error("Erro Semantico: Tipo incompativel na atribuicao da variavel '" + node->identificador + "'.");
+    //Verifica se os tipos da esquerda e da direita são exatamente iguais na matemática da linguagem
+    if (!tiposSaoIguais(tipoEsquerda, tipoDireita)) {
+        throw std::runtime_error("Erro Semantico: Tipos incompativeis na atribuicao.");
     }
 }
 
