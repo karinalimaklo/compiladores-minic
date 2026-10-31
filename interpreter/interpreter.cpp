@@ -12,6 +12,7 @@ void Interpreter::visit(ProgramNode* node) {
     //cadastra todas as classes/structs disponíveis
     for(const auto& classe : node->classes_structs) {
         auto structNode = static_cast<StructClassDeclStmtNode*>(classe.get());
+        m_classes[structNode->nome] = structNode;
     }
 
     //cadastra as funções do programa
@@ -62,6 +63,11 @@ void Interpreter::visit(LiteralNode* node) {
         case DataTypeKind::Bool:
             m_ultimoValorExpr = (node->valor == "true");
             break;
+        case DataTypeKind::Void:
+            if (node->valor == "nullptr") {
+                m_ultimoValorExpr = std::shared_ptr<ObjectValue>(nullptr);
+            }
+            break;
         default:
             break;
     }
@@ -96,12 +102,12 @@ void Interpreter::visit(BinaryExprNode* node) {
                 m_ultimoValorExpr = vEsq * vDir;
                 break;
             case BinaryOp::Div:
-                if(vDir == 0) throw RuntimeException("Erro de Execucao: Divisao por zero.");
-                m_ultimoValorExpr = vEsq / vDir;
+                if(vDir == 0) {throw RuntimeException("Erro de Execucao: Divisao por zero.");}
+                else {m_ultimoValorExpr = vEsq / vDir;}
                 break;
             case BinaryOp::Mod:
-                if (vDir == 0) throw RuntimeException("Erro de Execucao: Modulo por zero.");
-                m_ultimoValorExpr = vEsq % vDir;
+                if (vDir == 0) {throw RuntimeException("Erro de Execucao: Modulo por zero.");}
+                else{m_ultimoValorExpr = vEsq % vDir;}
                 break;
             case BinaryOp::Equal:
                 m_ultimoValorExpr = (vEsq == vDir);
@@ -142,7 +148,7 @@ void Interpreter::visit(BinaryExprNode* node) {
                 m_ultimoValorExpr = vEsq * vDir;
                 break;
             case BinaryOp::Div:
-                if (vDir == 0.0) throw RuntimeException("Erro de Execucao: Divisao por zero.");
+                if (vDir == 0.0 || vDir == -0.0) {throw RuntimeException("Erro de Execucao: Divisao por zero.");}
                 m_ultimoValorExpr = vEsq / vDir;
                 break;
             case BinaryOp::Equal:
@@ -189,17 +195,54 @@ void Interpreter::visit(BinaryExprNode* node) {
                 break;
         }
     }
+    else if (std::holds_alternative<std::shared_ptr<ObjectValue>>(esq) && 
+             std::holds_alternative<std::shared_ptr<ObjectValue>>(dir)) {
+        auto pEsq = std::get<std::shared_ptr<ObjectValue>>(esq);
+        auto pDir = std::get<std::shared_ptr<ObjectValue>>(dir);
+
+        switch (node->op) {
+            case BinaryOp::Equal:
+                //Se ambos apontarem para o mesmo objeto ou se ambos forem nullptr, o resultado é true
+                m_ultimoValorExpr = (pEsq == pDir);
+                break;
+            case BinaryOp::NotEqual:
+                m_ultimoValorExpr = (pEsq != pDir);
+                break;
+            default:
+                throw RuntimeException("Erro de Execucao: Operacao binaria invalida para ponteiros de objeto.");
+        }
+    } 
 }
 
 //Avalia negação lógica e sinal negativo
 void Interpreter::visit(UnaryExprNode* node) {
     node->fator->accept(this);
+    //Trata o operador de endereço '&' antes de avaliar o fator para não buscar o valor
+    if (node->op == UnaryOp::AddressOf) {
+        if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
+            //Em um interpretador baseado em árvore puro, simular o endereço físico de variáveis 
+            //locais é feito obtendo o valor atual da variável e propagando-o.
+            m_ultimoValorExpr = m_env.obter(idNode->nome);
+            return;
+        }
+    }
+
+    //Avaliação padrão dos outros operadores unários
+    node->fator->accept(this);
+    
     if(node->op == UnaryOp::LogicalNot && std::holds_alternative<bool>(m_ultimoValorExpr)) {
         m_ultimoValorExpr = !std::get<bool>(m_ultimoValorExpr);
     } else if(node->op == UnaryOp::Negate && std::holds_alternative<int>(m_ultimoValorExpr)) {
         m_ultimoValorExpr = -std::get<int>(m_ultimoValorExpr);
     } else if(node->op == UnaryOp::Negate && std::holds_alternative<double>(m_ultimoValorExpr)) {
         m_ultimoValorExpr = -std::get<double>(m_ultimoValorExpr);
+    } else if(node->op == UnaryOp::Deref) {
+        if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+            auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+            if (!obj) {
+                throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
+            }
+        }
     }
 }
 
@@ -319,8 +362,33 @@ void Interpreter::visit(VariableDeclStmtNode* node) {
 
 //Atualização de variáveis
 void Interpreter::visit(AssignmentStmtNode* node) {
-    node->expressao->accept(this);
-    m_env.atribuir(node->identificador, m_ultimoValorExpr);
+     //Avalia o lado direito primeiro para descobrir o valor que será guardado
+    node->direita->accept(this);
+    Value valorDireito = m_ultimoValorExpr;
+
+    //Resolve onde gravar com base no tipo do nó da esquerda
+    if (auto idNode = dynamic_cast<IdentifierNode*>(node->esquerda.get())) {
+        //Caso simples (Ex x = 10;)
+        m_env.atribuir(idNode->nome, valorDireito);
+    } 
+    else if (auto memNode = dynamic_cast<MemberAccessExprNode*>(node->esquerda.get())) {
+        //Caso de objeto (Ex: v.x = 10;)
+        memNode->objeto->accept(this);
+        if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+            auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+            if (!obj) throw RuntimeException("Erro de Execucao: Acesso a membro em ponteiro nulo.");
+            obj->campos[memNode->nomeMembro] = valorDireito;
+        }
+    }
+    else if (auto unNode = dynamic_cast<UnaryExprNode*>(node->esquerda.get())) {
+        //Caso de ponteiro: (Ex: *p = 10;)
+        if (unNode->op == UnaryOp::Deref) {
+            unNode->fator->accept(this);
+            if (auto subId = dynamic_cast<IdentifierNode*>(unNode->fator.get())) {
+                m_env.atribuir(subId->nome, valorDireito);
+            }
+        }
+    }
 }
 
 //Estrutura condicional if/else
