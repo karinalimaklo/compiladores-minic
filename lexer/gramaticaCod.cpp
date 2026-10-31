@@ -80,7 +80,8 @@ std::vector<EntradaLexica> criarTabelaTokens() {
     tabela.push_back({TipoToken::Lt,           textoFixo("<")});
     tabela.push_back({TipoToken::Le,           textoFixo("<=")});
 
-    // op_logico_and, op_logico_or, op_unario
+    // op_logico_and, op_logico_or, op_unario, op_address
+    tabela.push_back({TipoToken::Address,      textoFixo("&")});
     tabela.push_back({TipoToken::AndAnd,       textoFixo("&&")});
     tabela.push_back({TipoToken::OrOr,         textoFixo("||")});
     tabela.push_back({TipoToken::Not,          textoFixo("!")});
@@ -88,6 +89,10 @@ std::vector<EntradaLexica> criarTabelaTokens() {
     // incremento
     tabela.push_back({TipoToken::PlusPLus,     textoFixo("++")});
     tabela.push_back({TipoToken::MinMin,       textoFixo("--")});
+
+    // manuseio de classes e structs
+    tabela.push_back({TipoToken::Ponto,        textoFixo(".")});   // objeto.membro
+    tabela.push_back({TipoToken::Seta,         textoFixo("->")});  // ponteiro->membro
 
     // expressao_ternaria
     tabela.push_back({TipoToken::Interrogacao, textoFixo("?")});
@@ -125,6 +130,7 @@ const std::unordered_map<std::string, TipoToken>& palavrasChave() {
         {"while", TipoToken::PalWhile},   {"for", TipoToken::PalFor},
         {"break", TipoToken::PalBreak},   {"continue", TipoToken::PalContinue},
         {"return", TipoToken::PalRet},
+        {"class", TipoToken::PalClass}, {"struct", TipoToken::PalStruct},
     };
     return tabela;
 }
