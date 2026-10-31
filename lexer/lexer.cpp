@@ -149,6 +149,7 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::PalStruct:    return "PalStruct";
         case TipoToken::Ponto:        return "Ponto";
         case TipoToken::Seta:         return "Seta";
+        case TipoToken::PalNullptr:   return "PalNullptr";
     }
     return "?";
 }

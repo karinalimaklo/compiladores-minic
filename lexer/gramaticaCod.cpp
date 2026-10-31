@@ -131,6 +131,7 @@ const std::unordered_map<std::string, TipoToken>& palavrasChave() {
         {"break", TipoToken::PalBreak},   {"continue", TipoToken::PalContinue},
         {"return", TipoToken::PalRet},
         {"class", TipoToken::PalClass}, {"struct", TipoToken::PalStruct},
+        {"nullptr", TipoToken::PalNullptr},
     };
     return tabela;
 }
