@@ -26,16 +26,23 @@ set(PARSER_SOURCES
     parser/parser.cpp
 )
 
+set(TYPECHECKER_SOURCES
+    typechecker/symbol_table.cpp
+    typechecker/typechecker.cpp
+)
+
 # 3. Criar a biblioteca estática com o compilador completo
 add_library(compiler_core STATIC 
     ${LEXER_SOURCES} 
     ${PARSER_SOURCES}
+    ${TYPECHECKER_SOURCES}
 )
 
 # Indicar onde procurar as pastas de cabeçalhos (.hpp)
 target_include_directories(compiler_core PUBLIC 
     lexer 
     parser
+    typechecker
 )
 
 # 4. Criar o executável da sua Suite de Testes
