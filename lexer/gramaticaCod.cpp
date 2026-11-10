@@ -129,7 +129,7 @@ const std::unordered_map<std::string, TipoToken>& palavrasChave() {
         {"if", TipoToken::PalIf},         {"else", TipoToken::PalElse},
         {"while", TipoToken::PalWhile},   {"for", TipoToken::PalFor},
         {"break", TipoToken::PalBreak},   {"continue", TipoToken::PalContinue},
-        {"return", TipoToken::PalRet},
+        {"return", TipoToken::PalRet}, {"this", TipoToken::PalThis},
         {"class", TipoToken::PalClass}, {"struct", TipoToken::PalStruct},
         {"nullptr", TipoToken::PalNullptr},
     };

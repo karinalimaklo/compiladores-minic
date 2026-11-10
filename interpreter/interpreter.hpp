@@ -38,6 +38,7 @@ class Interpreter : public ASTVisitor {
         void visit(IncDecExprNode* node) override;
         void visit(FunctionCallExprNode* node) override;
         void visit(MemberAccessExprNode* node) override;
+        FunctionNode* buscarMetodo(const std::string& nomeClasse, const std::string& nomeMetodo) const;
 
         void visit(BlockStmtNode* node) override;
         void visit(VariableDeclStmtNode* node) override;

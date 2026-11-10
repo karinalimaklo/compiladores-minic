@@ -23,7 +23,16 @@ void TypeChecker::visit(ProgramNode* node) {
         for (const auto& campo : structNode->campos) {
             sig.atributos[campo.nome] = campo.tipo;
         }
-        
+        for (const auto& metodo : structNode->metodos) {
+            if(sig.metodos.find(metodo->nome) != sig.metodos.end()) {
+                 throw std::runtime_error("Erro Semantico: Redefinicao de metodo dentro da classe '" + structNode->nome + "'.");
+            }
+            sig.metodos[metodo->nome].tipoRetorno = metodo->tipoRetorno;
+            for (size_t i = 0; i < metodo->parametros.size(); i++) {
+                sig.metodos[metodo->nome].tiposParametros.push_back(metodo->parametros[i].tipo); 
+            }
+    
+        }
         //Insere na tabela global de classes
         if (m_tabClasses.find(structNode->nome) != m_tabClasses.end()) {
             throw std::runtime_error("Erro Semantico: Redefinicao de classe/struct '" + structNode->nome + "'.");
@@ -58,7 +67,15 @@ void TypeChecker::visit(ProgramNode* node) {
     for (const auto& func : node->funcoes) {
         func->accept(this); //Visita e checa o corpo de cada função individualmente
     }
-    
+    for (const auto& classe : node->classes_structs){
+        m_tabVariaveis.entrarEscopo();
+        auto classe_temp = static_cast<StructClassDeclStmtNode*> (classe.get());
+        m_tabVariaveis.inserir("this", DataType{DataTypeKind::Class, classe_temp->nome, 1});
+        for(const auto& metodo : classe_temp->metodos) {
+            metodo->accept(this);
+        }
+        m_tabVariaveis.sairEscopo();
+    }
     node->funcaoMain->accept(this); //Visita e checa o corpo da main
 }
 
@@ -94,8 +111,6 @@ void TypeChecker::visit(FunctionNode* node) {
 void TypeChecker::visit(StructClassDeclStmtNode* node) {
     //Vazio por design
 }
-
-//Métodos de visita para expressões (Preenchem m_tipoExprAtual)
 
 //Resolve o tipo de Literais Atômicos (Ex: 42, 3.14, 'a', true)
 void TypeChecker::visit(LiteralNode* node) {
@@ -326,16 +341,38 @@ void TypeChecker::visit(MemberAccessExprNode* node) {
     }
 
     const ClassSignature& sigClasse = itClasse->second;
+    if (!(node->isMetodo)) {
+        auto itAtributo = sigClasse.atributos.find(node->nomeMembro);
+        if (itAtributo == sigClasse.atributos.end()) { //
+            throw std::runtime_error("Erro Semantico: O membro '" + node->nomeMembro + "' nao existe na classe/struct '" + tipoObjeto.name + "'.");
+        } 
+        m_tipoExprAtual = itAtributo->second;
+    }   else {
+            auto itMetodo = sigClasse.metodos.find(node->nomeMembro);
+                if(itMetodo == sigClasse.metodos.end()) {
+                    throw std::runtime_error("Erro Semantico: O membro '" + node->nomeMembro + "' nao existe na classe/struct '" + tipoObjeto.name + "'.");
+                } else {
+                    const FunctionSignature assinatura = itMetodo->second;
+                    if(assinatura.tiposParametros.size() != node->metodo->argumentos.size()) {
+                        throw std::runtime_error("Erro Semantico: Numero incorreto de argumentos na chamada do metodo '" + node->metodo->nomeFuncao + "'.");
+                    }
+                    for (size_t i = 0; i < node->metodo->argumentos.size(); ++i) {
+                        node->metodo->argumentos[i]->accept(this); //Calcula o tipo do argumento e salva em m_tipoExprAtual
+                        DataType tipoArg = m_tipoExprAtual;
+                        DataType tipoParamEsperado = assinatura.tiposParametros[i];
 
-    //Verifica se o campo/atributo existe dentro da definição da classe
-    auto itAtributo = sigClasse.atributos.find(node->nomeMembro);
-    if (itAtributo == sigClasse.atributos.end()) {
-        throw std::runtime_error("Erro Semantico: O membro '" + node->nomeMembro + "' nao existe na classe/struct '" + tipoObjeto.name + "'.");
+                        if (!tiposSaoIguais(tipoArg, tipoParamEsperado)) {
+                            throw std::runtime_error("Erro Semantico: Tipo incompativel no argumento " + std::to_string(i + 1) + " da chamada de '" + node->metodo->nomeFuncao + "'.");
+                        }
+                }
+                m_tipoExprAtual = itMetodo->second.tipoRetorno;
+
+        }
     }
-
-    //O tipo resultante da expressão inteira de acesso é o tipo do próprio campo consultado
-    m_tipoExprAtual = itAtributo->second;
 }
+    //Verifica se o campo/atributo existe dentro da definição da classe
+    //O tipo resultante da expressão inteira de acesso é o tipo do próprio campo consultado
+
 
 // Métodos de visita para comandos/statements (Apenas validam regras)
 
@@ -413,11 +450,19 @@ void TypeChecker::visit(AssignmentStmtNode* node) {
     //Avalia o lado esquerdo da atribuição recursivamente através do Visitor
     node->esquerda->accept(this);
     DataType tipoEsquerda = m_tipoExprAtual;
-
+    if (auto nodeLeft = dynamic_cast<MemberAccessExprNode*>(node->esquerda.get())) {
+        if(nodeLeft->isMetodo) {
+            throw std::runtime_error("Erro Semantico: tentou gravar um valor em um método.");
+        } 
+    } 
     //Avalia o lado direito da atribuição
     node->direita->accept(this);
     DataType tipoDireita = m_tipoExprAtual;
-
+    if(auto nodeLeft = dynamic_cast<IdentifierNode*>(node->esquerda.get())) {
+        if(nodeLeft->nome == "this") {
+            throw std::runtime_error("Erro Semantico: tentou gravar um valor na referência *this*");
+        }
+    }
     //Verifica se os tipos da esquerda e da direita são exatamente iguais na matemática da linguagem
     if (!tiposSaoIguais(tipoEsquerda, tipoDireita)) {
         throw std::runtime_error("Erro Semantico: Tipos incompativeis na atribuicao.");

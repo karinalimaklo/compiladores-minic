@@ -18,6 +18,7 @@ struct FunctionSignature {
 struct ClassSignature {
     //Mapeia o nome do atributo interno para o seu respectivo tipo
     std::unordered_map<std::string, DataType> atributos;
+    std::unordered_map<std::string, FunctionSignature> metodos;
 };
 
 class TypeChecker : public ASTVisitor {

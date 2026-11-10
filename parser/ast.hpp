@@ -185,10 +185,12 @@ class MemberAccessExprNode : public ExpressionNode {
 public:
     std::unique_ptr<ExpressionNode> objeto;
     std::string nomeMembro;
+    std::unique_ptr<FunctionCallExprNode> metodo;
     bool isArrow; //true se for '->', false se for '.'
+    bool isMetodo;
 
-    MemberAccessExprNode(std::unique_ptr<ExpressionNode> obj, std::string membro, bool arrow)
-        : objeto(std::move(obj)), nomeMembro(std::move(membro)), isArrow(arrow) {}
+    MemberAccessExprNode(std::unique_ptr<ExpressionNode> obj, std::string membro,std::unique_ptr<FunctionCallExprNode> metodo_temp,  bool arrow, bool isMetodo)
+        : objeto(std::move(obj)), nomeMembro(std::move(membro)), metodo(std::move(metodo_temp)), isArrow(arrow), isMetodo(isMetodo){}
 
     void accept(ASTVisitor* visitor) override { visitor->visit(this); }
 };
@@ -204,10 +206,11 @@ class StructClassDeclStmtNode : public StatementNode {
 public:
     std::string nome;
     std::vector<FieldDeclarator> campos;
+    std::vector<std::unique_ptr<FunctionNode>> metodos;
     bool isClass; //true se foi declarada com 'class', false se 'struct'
 
-    StructClassDeclStmtNode(std::string nome, std::vector<FieldDeclarator> campos, bool isClass)
-        : nome(std::move(nome)), campos(std::move(campos)), isClass(isClass) {}
+    StructClassDeclStmtNode(std::string nome, std::vector<FieldDeclarator> campos, std::vector<std::unique_ptr<FunctionNode>> metodos_temp, bool isClass)
+        : nome(std::move(nome)), campos(std::move(campos)), metodos(std::move(metodos_temp)), isClass(isClass) {}
 
     void accept(ASTVisitor* visitor) override { visitor->visit(this); }
 };
@@ -318,9 +321,10 @@ public:
     std::string nome;
     std::vector<Parameter> parametros;
     std::unique_ptr<BlockStmtNode> bloco;
+    bool isMetodo;
 
-    FunctionNode(DataType tipo, std::string nome, std::vector<Parameter> params, std::unique_ptr<BlockStmtNode> corpo)
-        : tipoRetorno(tipo), nome(std::move(nome)), parametros(std::move(params)), bloco(std::move(corpo)) {}
+    FunctionNode(DataType tipo, std::string nome, std::vector<Parameter> params, std::unique_ptr<BlockStmtNode> corpo, bool isMetodo = false)
+        : tipoRetorno(tipo), nome(std::move(nome)), parametros(std::move(params)), bloco(std::move(corpo)), isMetodo(isMetodo){}
     void accept(ASTVisitor* visitor) override { visitor->visit(this); } 
 };
 

@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <stdexcept>
 
-// Exceção disparada em caso de erros de erros de execução (ex.: divisão por 0)
+// Exceção disparada em caso de erros de execução (ex.: divisão por 0)
 class RuntimeException : public std::runtime_error {
     public:
         explicit RuntimeException(const std::string& msg) : std::runtime_error(msg) {}

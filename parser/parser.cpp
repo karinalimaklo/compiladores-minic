@@ -143,20 +143,24 @@ std::unique_ptr<ProgramNode> Parser::parse() {
 std::unique_ptr<FunctionNode> Parser::parseDeclaracaoFuncao() {
     DataType tipoRet = mapearTipoBasico();
     Token idToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado identificador com o nome da funcao.");
-    
-    consumir(TipoToken::ColEsquerda, "Erro Sintatico: Esperado '(' apos o nome da funcao.");
-    std::vector<Parameter> params;
-    if (!checar(TipoToken::ColDireita)) {
-        params = parseParametros();
-    } //lembrar de fazer mudança
-    consumir(TipoToken::ColDireita, "Erro Sintatico: Esperado ')' apos a lista de parametros.");
+    bool isMetodo = false;
 
-    //Chama o analisador de bloco de comandos: bloco ::= "{" comando* "}"
-    std::unique_ptr<BlockStmtNode> corpo = parseBloco();
-
-    return std::make_unique<FunctionNode>(tipoRet, idToken.lexeme, std::move(params), std::move(corpo));
+    return std::move(parseCorpoFuncao(tipoRet, idToken, isMetodo));
 }
 
+std::unique_ptr<FunctionNode> Parser::parseCorpoFuncao(DataType tiporet, Token idToken, bool isMetodo) {
+    consumir(TipoToken::ColEsquerda, "Erro Sintatico: Esperado '(' apos o nome da funcao.");
+    std::vector<Parameter> params;
+
+    if(!checar(TipoToken::ColDireita)) {
+        params = parseParametros();
+    }
+    consumir(TipoToken::ColDireita, "Erro Sintatico:  Esperado ')' apos a lista de parametros.");
+    std::unique_ptr<BlockStmtNode> corpo = parseBloco();
+    return std::make_unique<FunctionNode>(tiporet, idToken.lexeme, std::move(params), std::move(corpo), isMetodo);
+
+
+}
 // Processa a declaração de uma Struct ou Classe: declaracao_struct_classe ::= ("struct" | "class") identificador "{" campo_atributo* "}" ";"
 std::unique_ptr<StatementNode> Parser::parseDeclaracaoStructClasse() {
     //Identifica se é class ou struct e consome o token correspondente
@@ -173,6 +177,7 @@ std::unique_ptr<StatementNode> Parser::parseDeclaracaoStructClasse() {
     //Abre o escopo interno de atributos
     consumir(TipoToken::ChavesEsq, "Erro Sintatico: Esperado '{' para iniciar o corpo da classe ou struct.");
     std::vector<FieldDeclarator> campos;
+    std::vector<std::unique_ptr<FunctionNode>> metodos;
 
     //Loop para ler todos os atributos internos até encontrar o fechamento de '}'
     while (!checar(TipoToken::ChavesDir) && !fim()) {
@@ -181,15 +186,19 @@ std::unique_ptr<StatementNode> Parser::parseDeclaracaoStructClasse() {
         
         //Coleta o nome do atributo
         Token nomeMembroToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado nome para o atributo.");
-        consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o nome do atributo.");
-        
-        campos.push_back(FieldDeclarator{tipoMembro, nomeMembroToken.lexeme});
+        if(checar({TipoToken::PontoVirg})) {
+            campos.push_back(FieldDeclarator{tipoMembro, nomeMembroToken.lexeme});
+            consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o nome do atributo.");
+
+        } else {
+            metodos.push_back(std::move(parseCorpoFuncao(tipoMembro, nomeMembroToken, true)));
+        }        
     }
 
     consumir(TipoToken::ChavesDir, "Erro Sintatico: Esperado '}' para fechar o corpo da classe ou struct.");
     consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o fechamento da classe ou struct.");
 
-    return std::make_unique<StructClassDeclStmtNode>(idToken.lexeme, std::move(campos), isClass);
+    return std::make_unique<StructClassDeclStmtNode>(idToken.lexeme, std::move(campos), std::move(metodos), isClass);
 }
 
 
@@ -480,7 +489,9 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
     if (match({TipoToken::PalNullptr})) {
         return std::make_unique<LiteralNode>(DataType{DataTypeKind::Void, "", 1}, "nullptr");
     }
-
+    if (match({TipoToken::PalThis})) {
+        return parseAcessoMembro(std::make_unique<IdentifierNode>("this"));
+    }
     //Operadores unários
     if (match({TipoToken::Not})) {
         std::unique_ptr<ExpressionNode> fat = parseFator();
@@ -543,18 +554,26 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
 //Processa a cadeia em loop de acessos: fator ::= fator_nucleo (op_acesso identificador)*
 std::unique_ptr<ExpressionNode> Parser::parseAcessoMembro(std::unique_ptr<ExpressionNode> objeto) {
     std::unique_ptr<ExpressionNode> expr = std::move(objeto);
-
+    std::unique_ptr<FunctionCallExprNode> nodoBase = nullptr;
     //Enquanto o próximo token for um ponto '.' ou uma seta '->'
     while (checar(TipoToken::Ponto) || checar(TipoToken::Seta)) {
         Token opToken = avancar(); // Consome o '.' ou '->'
         bool isArrow = (opToken.tipo == TipoToken::Seta);
-
-        //O que vem obrigatoriamente depois do operador é o nome do atributo/campo
+        bool isMetodo = false;
+        
         Token membroToken = consumir(TipoToken::Ident, "Erro Sintatico: Esperado nome do membro apos o operador de acesso.");
-
+        if (match({TipoToken::ColEsquerda})) {
+            isMetodo = true;
+            std::vector<std::unique_ptr<ExpressionNode>> args;
+            if (!checar(TipoToken::ColDireita)) {
+                args = parseArgumentos();
+            }
+            consumir(TipoToken::ColDireita, "Erro Sintatico: Esperado ')' apos os argumentos da funcao.");
+            nodoBase = std::make_unique<FunctionCallExprNode>(membroToken.lexeme, std::move(args));
+            }
         //Cria o nó de acesso empilhando a expressão anterior como a subárvore da esquerda
-        expr = std::make_unique<MemberAccessExprNode>(std::move(expr), membroToken.lexeme, isArrow);
+        expr = std::make_unique<MemberAccessExprNode>(std::move(expr), membroToken.lexeme, std::move(nodoBase), isArrow, isMetodo);
+    
     }
-
     return expr;
 }

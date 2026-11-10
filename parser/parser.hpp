@@ -53,6 +53,7 @@ private:
 
     //Estrutura global do programa
     std::unique_ptr<FunctionNode> parseDeclaracaoFuncao();
+    std::unique_ptr<FunctionNode> parseCorpoFuncao(DataType tiporet, Token idToken, bool isMetodo);
     std::unique_ptr<FunctionNode> parseFuncaoMain();
     std::unique_ptr<StatementNode> parseDeclaracaoStructClasse();
     

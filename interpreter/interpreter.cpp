@@ -284,16 +284,52 @@ void Interpreter::visit(FunctionCallExprNode* node) {
     func->accept(this);
     m_env.sairEscopo();
 }
+FunctionNode* Interpreter::buscarMetodo(const std::string& nomeClasse, const std::string& nomeMetodo) const {
+    auto it = m_classes.find(nomeClasse);
+    if (it == m_classes.end()) {
+        return nullptr;
+    }
 
+    for (const auto& metodo : it->second->metodos) {
+        if (metodo->nome == nomeMetodo) {
+            return metodo.get();
+        }
+    }
+    return nullptr;
+}
 //Acessa membros de objetos (. e ->)
 void Interpreter::visit(MemberAccessExprNode* node) {
     node->objeto->accept(this);
+
     if(std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
         auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
         if(!obj) {
             throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
         }
-        m_ultimoValorExpr = obj->campos[node->nomeMembro];
+        if(obj->campos.find(node->nomeMembro) != obj->campos.end()) {
+            m_ultimoValorExpr = obj->campos[node->nomeMembro];
+        } else {
+            FunctionNode* func = buscarMetodo(obj->nomeClasse, node->nomeMembro);
+            if(func == nullptr) {
+                throw RuntimeException("Erro de Execucao: metodo nao declarada: " + obj->nomeClasse);
+            } else {
+                std::vector<Value> valoresArgs;
+                
+                //Avalia os argumentos antes de mudar de escopo
+                for(auto& arg : node->metodo->argumentos) {
+                    arg->accept(this);
+                    valoresArgs.push_back(m_ultimoValorExpr);
+                }
+
+                m_env.entrarEscopo();
+                m_env.definir("this", obj);
+                for(size_t i = 0; i < func->parametros.size(); ++i) {
+                    m_env.definir(func->parametros[i].nome, valoresArgs[i]);
+                }
+                func->accept(this);
+                m_env.sairEscopo();
+            }
+        }
     }
 }
 
