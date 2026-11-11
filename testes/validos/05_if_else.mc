@@ -5,4 +5,5 @@ int main() {
     } else {
         x = 0;
     }
+    return 0;
 }

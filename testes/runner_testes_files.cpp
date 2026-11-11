@@ -97,7 +97,7 @@ bool testarArquivo(const std::string& caminhoArquivo, Expectativa expectativa) {
             std::cout << "[ OK ] Rejeitou corretamente (Erro Semantico esperado): " << caminhoArquivo << " | " << e.what() << "\n";
             return true;
         } else {
-            std::cout << "[FAIL] O Typechecker rejeitou um codigo semanticamente VALIDO: " << caminhoArquivo << "\n";
+            std::cout << "[FAIL] O Typechecker rejeitou um codigo semanticamente VALIDO: " << caminhoArquivo << "|" << e.what() << "\n";
             return false;
         }
     }

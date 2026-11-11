@@ -32,7 +32,8 @@ private:
     DataType m_tipoExprAtual;    //Usada para "retornar" o tipo calculado de uma expressão
     DataType m_tipoRetornoAtual; //Guarda qual o tipo de retorno da função que está sendo visitada no momento
     int m_profundidadeLacos = 0; //Guarda quantos whiles/fors estão aninhados (0 = nenhum)
-
+    bool sempreRetorna(StatementNode* node); //Usada para validar retorno
+    void validarTipoDeclarado(const DataType& tipo, const std::string& contexto, bool permitirVoid) const; //Usada para validar Datatypes
 public:
     TypeChecker() = default;
 

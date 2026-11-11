@@ -296,7 +296,7 @@ std::unique_ptr<StatementNode> Parser::parseComandoReturn() {
 std::unique_ptr<StatementNode> Parser::parseComando() {
     //Se começar com uma palavra-chave de tipo básico, é uma declaração de variável
     if (checar(TipoToken::PalInt) || checar(TipoToken::PalBool) || 
-        checar(TipoToken::PalChar) || checar(TipoToken::PalDouble)){
+        checar(TipoToken::PalChar) || checar(TipoToken::PalDouble) || checar(TipoToken::PalVoid)){
         return parseDeclaracaoVariavel();
     }
 
@@ -362,6 +362,7 @@ std::unique_ptr<StatementNode> Parser::parseAtribuicaoOuExpressaoStmt() {
 
     //Se o próximo token for um '='
     if (match({TipoToken::Assign})) {
+        if (!exprEsq->isLValue) {throw std::runtime_error("Erro Sintatico: Lado esquerdo da atribuicao invalido.");}
         //Faz o parsing da expressão do lado direito
         std::unique_ptr<ExpressionNode> exprDir = parseExpressao();
         consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' ao final da atribuicao.");
@@ -503,11 +504,15 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
     }
     if (match({TipoToken::Address})) { 
         std::unique_ptr<ExpressionNode> fat = parseFator();
+        fat->isLValue = true;
         return std::make_unique<UnaryExprNode>(UnaryOp::AddressOf, std::move(fat));
     }
     if (match({TipoToken::Star})) { 
         std::unique_ptr<ExpressionNode> fat = parseFator();
-        return std::make_unique<UnaryExprNode>(UnaryOp::Deref, std::move(fat));
+        auto nodo = std::make_unique<UnaryExprNode>(UnaryOp::Deref, std::move(fat));
+        //O resultado da desreferenciação é um LValue.
+        nodo->isLValue = true;
+        return nodo;
     }
     //Expressões: "(" expressao ")"
     if (match({TipoToken::ColEsquerda})) {
@@ -540,6 +545,7 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
         //Caso base: Identificador puro (Uso de variável simples)
         else {
             nodoBase = std::make_unique<IdentifierNode>(idToken.lexeme);
+            nodoBase->isLValue = true;
         }
 
         //Após resolver o núcleo do fator (variável, chamada ou incremento),
@@ -573,7 +579,7 @@ std::unique_ptr<ExpressionNode> Parser::parseAcessoMembro(std::unique_ptr<Expres
             }
         //Cria o nó de acesso empilhando a expressão anterior como a subárvore da esquerda
         expr = std::make_unique<MemberAccessExprNode>(std::move(expr), membroToken.lexeme, std::move(nodoBase), isArrow, isMetodo);
-    
+        expr->isLValue = !isMetodo;
     }
     return expr;
 }

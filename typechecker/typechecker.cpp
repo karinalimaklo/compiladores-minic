@@ -9,11 +9,89 @@ void TypeChecker::checar(ProgramNode* raiz) {
     }
 }
 
+//Verifica a garantia de return
+bool TypeChecker::sempreRetorna(StatementNode* node) {
+
+    if (!node) {
+        return false;
+    }
+
+    //Caso 1: return
+    if (dynamic_cast<ReturnStmtNode*>(node)) {
+        return true;
+    }
+
+    //Caso 2: bloco de comandos
+    if (auto bloco = dynamic_cast<BlockStmtNode*>(node)) {
+
+        for (const auto& comando : bloco->comandos) {
+
+            if (sempreRetorna(comando.get())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    //Caso 3: if/else
+    if (auto condicional = dynamic_cast<IfStmtNode*>(node)) {
+
+        //Sem else, existe a possibilidade de não retornar.
+        if (!condicional->comandoElse) {
+            return false;
+        }
+
+        //Os dois caminhos precisam retornar.
+        return sempreRetorna(condicional->comandoThen.get()) &&
+               sempreRetorna(condicional->comandoElse.get());
+    }
+
+    //Caso 4: while
+    //Não podemos garantir que o laço será executado.
+    if (dynamic_cast<WhileStmtNode*>(node)) {
+        return false;
+    }
+
+    //Outros comandos não garantem retorno.
+    return false;
+}
+
+//Valida os Datatypes
+void TypeChecker::validarTipoDeclarado(const DataType& tipo, const std::string& contexto, bool permitirVoid) const {
+
+    //Não permite níveis negativos de ponteiros
+    if (tipo.pointerLevel < 0) {
+        throw std::runtime_error("Erro Semantico: Nivel de ponteiro invalido em " + contexto + ".");
+    }
+    //Verifica se void está sendo usado sem ponteiro
+    if (tipo.kind == DataTypeKind::Void && tipo.pointerLevel == 0 && !permitirVoid) {
+        throw std::runtime_error("Erro Semantico: Tipo void nao permitido em " + contexto + ".");
+    }
+    //Verifica se uma classe/struct utilizada realmente existe
+    if (tipo.kind == DataTypeKind::Class) {
+        if (m_tabClasses.find(tipo.name) == m_tabClasses.end()) {
+            throw std::runtime_error("Erro Semantico: Classe/struct '" + tipo.name + "' nao foi definida em " + contexto + ".");
+        }
+    }
+}
+
 //programa ::= elemento_global* funcao_main
 void TypeChecker::visit(ProgramNode* node) {
     
-    //Coleta global (Preenche as tabelas de classes e funções)    
+    //Primeira passagem: coleta global de classes
     //Registra todas as classes/structs declaradas globalmente
+    for (const auto& classe : node->classes_structs) {
+        auto structNode = static_cast<StructClassDeclStmtNode*>(classe.get());
+        if (m_tabClasses.find(structNode->nome) != m_tabClasses.end()) {
+            throw std::runtime_error("Erro Semantico: Redefinicao de classe/struct '" + structNode->nome + "'.");
+        }
+
+        //Cria uma assinatura vazia para a classe
+        m_tabClasses.emplace(structNode->nome, ClassSignature{});
+    }
+    
+    //Segunda passagem: coleta atributos e métodos das classes
     for (const auto& classe : node->classes_structs) {
         //Convertemos o nó genérico para o nó específico de declaração
         auto structNode = static_cast<StructClassDeclStmtNode*>(classe.get());
@@ -21,32 +99,54 @@ void TypeChecker::visit(ProgramNode* node) {
         ClassSignature sig;
         //Varre todos os atributos da struct/classe e guarda na assinatura
         for (const auto& campo : structNode->campos) {
-            sig.atributos[campo.nome] = campo.tipo;
+             //Valida o tipo do atributo.
+            validarTipoDeclarado(campo.tipo,"atributo '" + campo.nome + "'",false);
+            if (sig.atributos.find(campo.nome) != sig.atributos.end()) { //checa se a variavel foi redefinida em algum momento
+            throw std::runtime_error("Erro Semantico: Redefinicao do atributo '" + campo.nome + "' na classe '" + structNode->nome + "'.");
+            }
+            //Impede atributo com o mesmo nome de um método.
+            if (sig.metodos.find(campo.nome) != sig.metodos.end()) {
+                throw std::runtime_error("Erro Semantico: Atributo e metodo possuem o mesmo nome na classe '" + structNode->nome + "'.");
+            }
+            sig.atributos.emplace(campo.nome, campo.tipo);
         }
         for (const auto& metodo : structNode->metodos) {
-            if(sig.metodos.find(metodo->nome) != sig.metodos.end()) {
-                 throw std::runtime_error("Erro Semantico: Redefinicao de metodo dentro da classe '" + structNode->nome + "'.");
+
+            //Valida o tipo de retorno do método
+            validarTipoDeclarado(metodo->tipoRetorno, "retorno do metodo '" + metodo->nome + "'", true);
+            //Impede métodos duplicados
+            if (sig.metodos.find(metodo->nome) != sig.metodos.end()) {
+                throw std::runtime_error("Erro Semantico: Redefinicao de metodo '" + metodo->nome + "' na classe '" + structNode->nome + "'.");
             }
-            sig.metodos[metodo->nome].tipoRetorno = metodo->tipoRetorno;
-            for (size_t i = 0; i < metodo->parametros.size(); i++) {
-                sig.metodos[metodo->nome].tiposParametros.push_back(metodo->parametros[i].tipo); 
+            //Impede método com o mesmo nome de um atributo
+            if (sig.atributos.find(metodo->nome) != sig.atributos.end()) {
+                throw std::runtime_error("Erro Semantico: Atributo e metodo possuem o mesmo nome na classe '" + structNode->nome + "'.");
             }
-    
+            
+            //Cria a assinatura do método
+            FunctionSignature assinatura;
+            assinatura.tipoRetorno = metodo->tipoRetorno;
+
+            //Valida e coleta os parâmetros
+            for (const auto& param : metodo->parametros) {
+                validarTipoDeclarado(param.tipo, "parametro '" + param.nome + "' do metodo '" + metodo->nome + "'", false);
+                assinatura.tiposParametros.push_back(param.tipo);
+            }
+            sig.metodos.emplace(metodo->nome, std::move(assinatura));
         }
-        //Insere na tabela global de classes
-        if (m_tabClasses.find(structNode->nome) != m_tabClasses.end()) {
-            throw std::runtime_error("Erro Semantico: Redefinicao de classe/struct '" + structNode->nome + "'.");
-        }
-        m_tabClasses[structNode->nome] = sig;
+        m_tabClasses[structNode->nome] = std::move(sig);
     }
 
     //Registra todas as funções normais declaradas globalmente
     for (const auto& func : node->funcoes) {
         FunctionSignature sig;
+        //Valida o tipo de retorno da função
+        validarTipoDeclarado(func->tipoRetorno, "retorno da funcao '" + func->nome + "'", true);
         sig.tipoRetorno = func->tipoRetorno;
         
         //Coleta o tipo de dados de cada parâmetro da assinatura da função
         for (const auto& param : func->parametros) {
+            validarTipoDeclarado(param.tipo, "parametro '" + param.nome + "' da funcao '" + func->nome + "'", false);
             sig.tiposParametros.push_back(param.tipo);
         }
         
@@ -58,12 +158,12 @@ void TypeChecker::visit(ProgramNode* node) {
 
     //Registra a função obrigatória int main()
     FunctionSignature sigMain;
-    sigMain.tipoRetorno = node->funcaoMain->tipoRetorno; // Deve ser Int
+    sigMain.tipoRetorno = node->funcaoMain->tipoRetorno; //Deve ser Int
+    validarTipoDeclarado(node->funcaoMain->tipoRetorno, "retorno da funcao main", false);
     m_tabFuncoes[node->funcaoMain->nome] = sigMain;
 
     //Checagem do corpo de cada função/main
     //Como o compilador já conhece todas as funções e structs, pode-se entrar no corpo de cada uma para validar os comandos reais
-    
     for (const auto& func : node->funcoes) {
         func->accept(this); //Visita e checa o corpo de cada função individualmente
     }
@@ -103,6 +203,16 @@ void TypeChecker::visit(FunctionNode* node) {
         node->bloco->accept(this);
     }
 
+    //Verifica se uma função não void garante retorno
+    if ((node->tipoRetorno.kind != DataTypeKind::Void ||
+        node->tipoRetorno.pointerLevel > 0)) {
+
+        if (!sempreRetorna(node->bloco.get())) {
+            throw std::runtime_error("Erro Semantico: Funcao '" + node->nome +"' pode terminar sem retornar um valor.");
+        }
+    }
+
+
     //Limpa o escopo local ao sair da função
     m_tabVariaveis.sairEscopo();
 }
@@ -134,11 +244,11 @@ void TypeChecker::visit(IdentifierNode* node) {
 
 //Função auxiliar privada para comparar se dois tipos são exatamente iguais
 bool tiposSaoIguais(const DataType& t1, const DataType& t2) {
-    if (t1.kind == DataTypeKind::Void && t1.pointerLevel >= 1) {
-        return t2.pointerLevel >= 1;
+    if (t1.kind == DataTypeKind::Void && t1.pointerLevel == 1) {
+        return t2.pointerLevel == 1;
     }
-    if (t2.kind == DataTypeKind::Void && t2.pointerLevel >= 1) {
-        return t1.pointerLevel >= 1;
+    if (t2.kind == DataTypeKind::Void && t2.pointerLevel == 1) {
+        return t1.pointerLevel == 1;
     }
     if (t1.kind != t2.kind) return false;
     if (t1.pointerLevel != t2.pointerLevel) return false;
@@ -171,6 +281,9 @@ void TypeChecker::visit(BinaryExprNode* node) {
             if (tipoEsq.kind != DataTypeKind::Int && tipoEsq.kind != DataTypeKind::Double) {
                 throw std::runtime_error("Erro Semantico: Operadores aritmeticos exigem tipos numericos (Int ou Double).");
             }
+            if (node->op == BinaryOp::Mod && tipoEsq.kind != DataTypeKind::Int) {
+                throw std::runtime_error("Erro Semantico: O operador '%' exige operandos inteiros.");
+            }
             if (tipoEsq.pointerLevel > 0) {
                 throw std::runtime_error("Erro Semantico: Aritmetica direta de ponteiros nao suportada neste operador.");
             }
@@ -184,7 +297,15 @@ void TypeChecker::visit(BinaryExprNode* node) {
         case BinaryOp::LessThan:
         case BinaryOp::LessEqual:
         case BinaryOp::GreaterThan:
-        case BinaryOp::GreaterEqual:
+        case BinaryOp::GreaterEqual:{
+            bool permitido = (tipoEsq.kind == DataTypeKind::Int || tipoEsq.kind == DataTypeKind::Double || tipoEsq.kind == DataTypeKind::Char);
+            if (!permitido || tipoEsq.pointerLevel > 0 || !tiposSaoIguais(tipoEsq, tipoDir)) {
+            throw std::runtime_error("Erro Semantico: Operadores relacionais exigem operandos numericos compativeis ou char.");
+            }
+            //O resultado de qualquer comparação relacional ou igualdade é sempre Booleano
+            m_tipoExprAtual = DataType{DataTypeKind::Bool, "", 0};
+            break;
+        }
         case BinaryOp::Equal:
         case BinaryOp::NotEqual: {
             //Ambos os lados precisam ter tipos compatíveis para serem comparados
@@ -239,10 +360,12 @@ void TypeChecker::visit(UnaryExprNode* node) {
 
         //Operador de endereço: &x (Aumenta o nível de ponteiro)
         case UnaryOp::AddressOf: {
-            //Nota: Em um compilador completo, seria checado se o nó é um LValue (pode ter seu endereço pego)
+            if (!node->fator->isLValue) {throw std::runtime_error("Erro Semantico: O operador '&' exige um LValue.");}
             DataType tipoResultado = tipoFator;
             tipoResultado.pointerLevel++; //Se era Int (0), vira Int* (1). Se era Int* (1), vira Int** (2)
-            
+            if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
+            if(idNode->nome == "this"){throw std::runtime_error("Erro Semantico: Tentativa de modificação do valor de referência do this.");}
+            }
             m_tipoExprAtual = tipoResultado;
             break;
         }
@@ -252,6 +375,7 @@ void TypeChecker::visit(UnaryExprNode* node) {
             if (tipoFator.pointerLevel == 0) {
                 throw std::runtime_error("Erro Semantico: Nao eh possivel desreferenciar um tipo que nao eh ponteiro.");
             }
+            if (tipoFator.kind == DataTypeKind::Void && tipoFator.pointerLevel == 1) {throw std::runtime_error("Nao e permitido desreferenciar um ponteiro void.");}
             
             DataType tipoResultado = tipoFator;
             tipoResultado.pointerLevel--; //Se era Int* (1), vira Int (0)
@@ -273,7 +397,7 @@ void TypeChecker::visit(IncDecExprNode* node) {
     DataType tipoVar = encontrado.value();
 
     //Incremento e decremento só fazem sentido em variáveis numéricas puras
-    if ((tipoVar.kind != DataTypeKind::Int && tipoVar.kind != DataTypeKind::Double) || tipoVar.pointerLevel > 0) {
+    if (tipoVar.kind != DataTypeKind::Int || tipoVar.pointerLevel > 0) {
         throw std::runtime_error("Erro Semantico: Operadores '++' e '--' exigem uma variavel numerica comum.");
     }
 
@@ -416,12 +540,10 @@ void TypeChecker::visit(ContinueStmtNode* node) {
 
 //Valida declarações de variáveis locais: declaracao_variavel ::= tipo_basico declarador ("," declarador)* ";"
 void TypeChecker::visit(VariableDeclStmtNode* node) {
+
     //Se o tipo básico for uma Classe/Struct, verifica se ela existe na tabela global
-    if (node->tipoBasico.kind == DataTypeKind::Class) {
-        if (m_tabClasses.find(node->tipoBasico.name) == m_tabClasses.end()) {
-            throw std::runtime_error("Erro Semantico: O tipo de classe/struct '" + node->tipoBasico.name + "' usado na declaracao nao foi definido.");
-        }
-    }
+    //Ultimo argumento é false porque variável não pode ser declarada como void puro
+    validarTipoDeclarado(node->tipoBasico, "declaracao de variavel", false);
 
     //Processa cada um dos declaradores da linha (Ex: int a = 2, b;)
     for (const auto& decl : node->declaradores) {
@@ -447,6 +569,7 @@ void TypeChecker::visit(VariableDeclStmtNode* node) {
 
 //Valida a atribuição de valores: atribuicao ::= identificador "=" expressao ";"
 void TypeChecker::visit(AssignmentStmtNode* node) {
+    if (!node->esquerda->isLValue) {throw std::runtime_error("Erro Semantico: Lado esquerdo da atribuicao nao eh um LValue.");}
     //Avalia o lado esquerdo da atribuição recursivamente através do Visitor
     node->esquerda->accept(this);
     DataType tipoEsquerda = m_tipoExprAtual;

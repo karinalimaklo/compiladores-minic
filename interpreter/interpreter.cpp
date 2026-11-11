@@ -173,6 +173,43 @@ void Interpreter::visit(BinaryExprNode* node) {
                 break;
         }
     }
+    // Operações com caracteres
+    else if (std::holds_alternative<char>(esq) && std::holds_alternative<char>(dir)){
+
+        char cEsq = std::get<char>(esq);
+        char cDir = std::get<char>(dir);
+
+        switch (node->op) {
+            case BinaryOp::Equal:
+                m_ultimoValorExpr = (cEsq == cDir);
+                break;
+
+            case BinaryOp::NotEqual:
+                m_ultimoValorExpr = (cEsq != cDir);
+                break;
+
+            case BinaryOp::LessThan:
+                m_ultimoValorExpr = (cEsq < cDir);
+                break;
+
+            case BinaryOp::LessEqual:
+                m_ultimoValorExpr = (cEsq <= cDir);
+                break;
+
+            case BinaryOp::GreaterThan:
+                m_ultimoValorExpr = (cEsq > cDir);
+                break;
+
+            case BinaryOp::GreaterEqual:
+                m_ultimoValorExpr = (cEsq >= cDir);
+                break;
+
+            default:
+                throw RuntimeException(
+                    "Erro de Execucao: Operacao invalida para caracteres."
+                );
+        }
+    }
     //Operações lógicas booleanas
     else if (std::holds_alternative<bool>(esq) && std::holds_alternative<bool>(dir)) {
         bool bEsq = std::get<bool>(esq);

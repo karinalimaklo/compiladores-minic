@@ -3,4 +3,5 @@ int main() {
     bool b;
     char c;
     double d;
+    return 0;
 }

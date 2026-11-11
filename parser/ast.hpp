@@ -107,6 +107,7 @@ public:
 
 class ExpressionNode : public ASTNode { //Expressões
 public:
+    bool isLValue = false;
     ~ExpressionNode() override = default;
     //herdado: virtual void accept(ASTVisitor* visitor) = 0;
 };

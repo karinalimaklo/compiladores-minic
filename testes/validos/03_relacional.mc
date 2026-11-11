@@ -5,4 +5,5 @@ int main() {
     bool r4 = 10 >= 10;
     bool r5 = 4 == 4;
     bool r6 = 4 != 5;
+    return 0;
 }
