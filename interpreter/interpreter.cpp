@@ -275,9 +275,14 @@ void Interpreter::visit(UnaryExprNode* node) {
         if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
             //Em um interpretador baseado em árvore puro, simular o endereço físico de variáveis 
             //locais é feito obtendo o valor atual da variável e propagando-o.
-            m_ultimoValorExpr = m_env.obter(idNode->nome);
+            m_ultimoValorExpr = m_env.obter(idNode->nome, true);
             return;
         }
+    } else if(node->op == UnaryOp::Deref) {
+         if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
+            m_ultimoValorExpr = m_env.obter(idNode->nome, false, true);
+            return;
+         }
     }
 
     //Avaliação padrão dos outros operadores unários
@@ -407,11 +412,16 @@ void Interpreter::visit(MemberAccessExprNode* node) {
 
 //Blocos de código entre chaves
 void Interpreter::visit(BlockStmtNode* node) {
+    struct GuardaEscopo {
+        Environment& env;
+        ~GuardaEscopo() { env.sairEscopo(); }
+    };
     m_env.entrarEscopo();
+    GuardaEscopo guarda{m_env};
+
     for(const auto& cmd : node->comandos) {
         if(cmd) cmd->accept(this);
     }
-    m_env.sairEscopo();
 }
 
 //Instancia objeto com campos zerados/padrão conforme sua definição
@@ -510,7 +520,7 @@ void Interpreter::visit(AssignmentStmtNode* node) {
         if (unNode->op == UnaryOp::Deref) {
             unNode->fator->accept(this);
             if (auto subId = dynamic_cast<IdentifierNode*>(unNode->fator.get())) {
-                m_env.atribuir(subId->nome, valorDireito);
+                m_env.atribuir(subId->nome, valorDireito, true);
             }
         }
     }

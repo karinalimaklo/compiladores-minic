@@ -23,11 +23,21 @@ void Environment::definir(const std::string& nome, const Value& valor) {
 }
 
 // Procura a variável do escopo interno para o externo e atualiza seu valor
-void Environment::atribuir(const std::string& nome, const Value& valor) {
+void Environment::atribuir(const std::string& nome, const Value& valor, bool is_ptr) {
     for(auto it = m_escopos.rbegin(); it != m_escopos.rend(); ++it) {
         auto enc = it->find(nome);
         if(enc != it->end()) {
+            if(is_ptr) {
+                std::shared_ptr<Celula> cel_temp = std::get<std::shared_ptr<Celula>> ((*enc->second).valor);
+                if(cel_temp)
+                    cel_temp->valor = valor;
+                else
+                    throw RuntimeException("Erro de Execucao: tentativa de dereferenciacao de ponteiro vazio");
+
+            } else {
             (*enc->second).valor = valor;
+
+            }
             return;
         }
     }
@@ -35,14 +45,23 @@ void Environment::atribuir(const std::string& nome, const Value& valor) {
 }
 
 // Procura o valor de uma variável do escopo interno para o externo
-Value Environment::obter(const std::string& nome, bool isaddr) const {
+Value Environment::obter(const std::string& nome, bool isaddr, bool is_ptr) const {
     for (auto it = m_escopos.rbegin(); it != m_escopos.rend(); ++it) {
         auto enc = it->find(nome);
         if(enc != it->end()) {
-            if( isaddr) 
+            if( isaddr) {
                 return enc->second;
-            else 
+            }
+            else if (is_ptr) {
+                std::shared_ptr<Celula> cel_temp = std::get<std::shared_ptr<Celula>> ((*enc->second).valor);
+                if(cel_temp)
+                    return cel_temp->valor; 
+                else
+                    throw RuntimeException("Erro de Execucao: tentativa de dereferenciacao de ponteiro vazio");
+            } else {
                 return (*enc->second).valor;
+  
+            }
         } 
     }
     throw RuntimeException("Erro de Execucao: Variavel '" + nome + "' nao foi encontrada na memoria.");
