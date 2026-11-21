@@ -17,7 +17,8 @@ void Environment::sairEscopo() {
 // Insere uma nova variável estritamente no escopo atual
 void Environment::definir(const std::string& nome, const Value& valor) {
     if(!m_escopos.empty()) {
-        m_escopos.back()[nome] = valor;
+        std::shared_ptr<Celula> celula_temp(new Celula {valor});
+        m_escopos.back()[nome] = celula_temp;
     }
 }
 
@@ -26,7 +27,7 @@ void Environment::atribuir(const std::string& nome, const Value& valor) {
     for(auto it = m_escopos.rbegin(); it != m_escopos.rend(); ++it) {
         auto enc = it->find(nome);
         if(enc != it->end()) {
-            enc->second = valor;
+            (*enc->second).valor = valor;
             return;
         }
     }
@@ -34,12 +35,15 @@ void Environment::atribuir(const std::string& nome, const Value& valor) {
 }
 
 // Procura o valor de uma variável do escopo interno para o externo
-Value Environment::obter(const std::string& nome) const {
+Value Environment::obter(const std::string& nome, bool isaddr) const {
     for (auto it = m_escopos.rbegin(); it != m_escopos.rend(); ++it) {
         auto enc = it->find(nome);
         if(enc != it->end()) {
-            return enc->second;
-        }
+            if( isaddr) 
+                return enc->second;
+            else 
+                return (*enc->second).valor;
+        } 
     }
     throw RuntimeException("Erro de Execucao: Variavel '" + nome + "' nao foi encontrada na memoria.");
 }

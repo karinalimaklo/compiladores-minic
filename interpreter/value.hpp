@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <stdexcept>
 
+
+
 // Exceção disparada em caso de erros de execução (ex.: divisão por 0)
 class RuntimeException : public std::runtime_error {
     public:
@@ -15,10 +17,13 @@ class RuntimeException : public std::runtime_error {
 };
 
 struct ObjectValue;
+struct Celula;
 
 // Tipo polimórfico de tempo de execução que suporta primitivos e ponteiros/instâncias de objetos
-using Value = std::variant<int, double, char, bool, std::shared_ptr<ObjectValue>>;
-
+using Value = std::variant<int, double, char, bool, std::shared_ptr<ObjectValue>, std::shared_ptr<Celula>>;
+struct Celula {
+    Value valor; // se for um ponteiro de nivel 1
+};
 // Estrutura que representa uma instância de struct ou classe na memória dinamicamente alocada
 struct ObjectValue {
     std::string nomeClasse;

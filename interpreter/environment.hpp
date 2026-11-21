@@ -11,7 +11,7 @@
 class Environment {
     private:
         //pilha de escopos: o topo representa o escopo mais interno
-        std::vector<std::unordered_map<std::string, Value>> m_escopos;
+        std::vector<std::unordered_map<std::string, std::shared_ptr<Celula>>> m_escopos;
 
     public:
         Environment();
@@ -21,5 +21,5 @@ class Environment {
 
         void definir(const std::string& nome, const Value& valor); //declara variável no escopo atual
         void atribuir(const std::string& nome, const Value& value); //atualiza variável existente
-        Value obter(const std::string& nome) const; //busca valor da variável
+        Value obter(const std::string& nome, bool isaddr = false) const; //busca valor da variável
 };

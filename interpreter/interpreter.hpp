@@ -39,6 +39,7 @@ class Interpreter : public ASTVisitor {
         void visit(FunctionCallExprNode* node) override;
         void visit(MemberAccessExprNode* node) override;
         FunctionNode* buscarMetodo(const std::string& nomeClasse, const std::string& nomeMetodo) const;
+        void verificaCelula(MemberAccessExprNode* node);
 
         void visit(BlockStmtNode* node) override;
         void visit(VariableDeclStmtNode* node) override;
@@ -49,6 +50,7 @@ class Interpreter : public ASTVisitor {
         void visit(ContinueStmtNode* node) override;
         void visit(ReturnStmtNode* node) override;
         void visit(ExpressionStmtNode* node) override;
+        void visit(NewExprNode* node) override;
 
     private:
         //cria uma nova instância de struct/class preenchendo os atributos com valores padrão

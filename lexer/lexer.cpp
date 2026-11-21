@@ -113,6 +113,7 @@ const char* nomeToken(TipoToken t) {
         case TipoToken::PalFor:       return "PalFor";
         case TipoToken::PalBreak:     return "PalBreak";
         case TipoToken::PalContinue:  return "PalContinue";
+        case TipoToken::PalNew:       return "PalNew";
         case TipoToken::PalRet:       return "PalRet";
         case TipoToken::Plus:         return "Plus";
         case TipoToken::Min:          return "Min";

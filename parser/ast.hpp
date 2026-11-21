@@ -28,6 +28,7 @@ class ExpressionStmtNode;
 class ProgramNode;
 class StructClassDeclStmtNode;
 class MemberAccessExprNode;
+class NewExprNode;
 
 //Enumerações auxiliares para representar tipos de dados e operadores
 enum class DataTypeKind {
@@ -89,6 +90,7 @@ public:
     virtual void visit(ContinueStmtNode* node) = 0;
     virtual void visit(ReturnStmtNode* node) = 0;
     virtual void visit(ExpressionStmtNode* node) = 0;
+    virtual void visit(NewExprNode* node) = 0;
 
     //Métodos de visita para estruturas de nível superior
     virtual void visit(FunctionNode* node) = 0;
@@ -194,6 +196,16 @@ public:
         : objeto(std::move(obj)), nomeMembro(std::move(membro)), metodo(std::move(metodo_temp)), isArrow(arrow), isMetodo(isMetodo){}
 
     void accept(ASTVisitor* visitor) override { visitor->visit(this); }
+};
+
+class NewExprNode : public ExpressionNode {
+public:
+    DataType tipo;
+    std::vector<std::unique_ptr<ExpressionNode>> parametros;
+
+    NewExprNode(DataType tipo_temp, std::vector<std::unique_ptr<ExpressionNode>> param) : tipo(tipo_temp), parametros(std::move(param)){};
+
+    void accept(ASTVisitor* visitor) override {visitor->visit(this);}
 };
 
 //Atributo interno de uma Struct/Classe

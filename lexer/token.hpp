@@ -13,7 +13,7 @@ enum class TipoToken {
     PalInt, PalChar, PalDouble, PalBool, PalString, PalVoid,
     PalTrue, PalFalse,
     PalIf, PalElse, PalWhile, PalFor, PalBreak, PalContinue, PalRet, PalThis,
-    PalClass, PalStruct, PalNullptr,
+    PalClass, PalStruct, PalNullptr,PalNew,
     // Operadores
     Plus, Min, Star, Div, Percent,
     Assign, PlusAssign, MinAssign,

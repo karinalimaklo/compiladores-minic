@@ -109,6 +109,7 @@ void TypeChecker::visit(ProgramNode* node) {
                 throw std::runtime_error("Erro Semantico: Atributo e metodo possuem o mesmo nome na classe '" + structNode->nome + "'.");
             }
             sig.atributos.emplace(campo.nome, campo.tipo);
+            sig.tipos.push_back(campo.tipo);
         }
         for (const auto& metodo : structNode->metodos) {
 
@@ -656,4 +657,43 @@ void TypeChecker::visit(ReturnStmtNode* node) {
             throw std::runtime_error("Erro Semantico: Esperada uma expressao de retorno para esta funcao.");
         }
     }
+}
+
+void TypeChecker::visit(NewExprNode* node) {
+    validarTipoDeclarado(node->tipo, "declaracao de variavel", false);
+    ClassSignature sig_temp = m_tabClasses[node->tipo.name];
+    size_t qtd_atributos = sig_temp.atributos.size();
+    if(node->tipo.kind != DataTypeKind::Class) {
+        throw std::runtime_error("Erro Semantico: Utilização de construtor em ponteiro para tipo literal  '" + node->tipo.name + "'.");
+
+    }
+    if (node->tipo.pointerLevel > 0) {
+        if(node->parametros.size() > 1) {
+            throw std::runtime_error("Erro Semantico: Numero incorreto de argumentos no construtor de  '" + node->tipo.name + "'.");  
+        } else if(node->parametros.size() == 1) {
+            node->parametros[0]->accept(this);
+            DataType tipoArg = m_tipoExprAtual;
+            if (!tiposSaoIguais(tipoArg, node->tipo)) {
+                throw std::runtime_error("Erro Semantico: Tipo incompativel no argumento " + std::to_string(1) + " do construtor de '" + node->tipo.name + "'.");
+            }
+        } 
+    } else {
+        if (node->parametros.size() != qtd_atributos ) {
+        throw std::runtime_error("Erro Semantico: Numero incorreto de argumentos no construtor de  '" + node->tipo.name + "'.");
+        }
+
+        //Avalia e valida o tipo de cada argumento passado recursivamente
+        for (size_t i = 0; i < node->parametros.size(); ++i) {
+            node->parametros[i]->accept(this); //Calcula o tipo do argumento e salva em m_tipoExprAtual
+            DataType tipoArg = m_tipoExprAtual;
+            DataType tipo_esperado = sig_temp.tipos[i];
+
+            if (!tiposSaoIguais(tipoArg, tipo_esperado)) {
+                throw std::runtime_error("Erro Semantico: Tipo incompativel no argumento " + std::to_string(i + 1) + " do construtor de '" + node->tipo.name + "'.");
+            }
+        }
+    }
+
+    m_tipoExprAtual = DataType{node->tipo.kind, node->tipo.name, (node->tipo.pointerLevel)+1 };
+
 }

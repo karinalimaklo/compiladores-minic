@@ -493,6 +493,16 @@ std::unique_ptr<ExpressionNode> Parser::parseFator() {
     if (match({TipoToken::PalThis})) {
         return parseAcessoMembro(std::make_unique<IdentifierNode>("this"));
     }
+    if(match({TipoToken::PalNew})) {
+        DataType tipo_temp = mapearTipoBasico();
+        std::vector<std::unique_ptr<ExpressionNode>> args;
+        consumir(TipoToken::ChavesEsq, "Erro Sintatico: Esperado '{' para iniciar o corpo da classe ou struct.");
+        if(!checar((TipoToken::ChavesDir))) {
+            args = parseArgumentos();
+        } 
+        consumir(TipoToken::ChavesDir, "Erro Sintatico: Esperado '}' apos a expressao aninhada.");
+        return std::make_unique<NewExprNode>((tipo_temp), std::move(args));
+    }
     //Operadores unários
     if (match({TipoToken::Not})) {
         std::unique_ptr<ExpressionNode> fat = parseFator();

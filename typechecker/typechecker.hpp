@@ -19,6 +19,7 @@ struct ClassSignature {
     //Mapeia o nome do atributo interno para o seu respectivo tipo
     std::unordered_map<std::string, DataType> atributos;
     std::unordered_map<std::string, FunctionSignature> metodos;
+    std::vector<DataType> tipos;
 };
 
 class TypeChecker : public ASTVisitor {
@@ -68,4 +69,5 @@ public:
     void visit(ContinueStmtNode* node) override;
     void visit(ReturnStmtNode* node) override;
     void visit(ExpressionStmtNode* node) override;
+    void visit(NewExprNode* node) override;
 };

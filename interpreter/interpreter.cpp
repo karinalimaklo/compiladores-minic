@@ -65,7 +65,7 @@ void Interpreter::visit(LiteralNode* node) {
             break;
         case DataTypeKind::Void:
             if (node->valor == "nullptr") {
-                m_ultimoValorExpr = std::shared_ptr<ObjectValue>(nullptr);
+                m_ultimoValorExpr = std::shared_ptr<Celula>{};
             }
             break;
         default:
@@ -249,6 +249,22 @@ void Interpreter::visit(BinaryExprNode* node) {
                 throw RuntimeException("Erro de Execucao: Operacao binaria invalida para ponteiros de objeto.");
         }
     } 
+    else if (std::holds_alternative<std::shared_ptr<Celula>>(esq) && 
+             std::holds_alternative<std::shared_ptr<Celula>>(dir)) {
+        auto pEsq = std::get<std::shared_ptr<Celula>> (esq);
+        auto pDir = std::get<std::shared_ptr<Celula>> (dir);
+        switch (node->op) {
+            case BinaryOp::Equal:
+                //Se ambos apontarem para o mesmo objeto ou se ambos forem nullptr, o resultado é true
+                m_ultimoValorExpr = (pEsq == pDir);
+                break;
+            case BinaryOp::NotEqual:
+                m_ultimoValorExpr = (pEsq != pDir);
+                break;
+            default:
+                throw RuntimeException("Erro de Execucao: Operacao binaria invalida para ponteiros de objeto.");
+        }
+}
 }
 
 //Avalia negação lógica e sinal negativo
@@ -334,10 +350,29 @@ FunctionNode* Interpreter::buscarMetodo(const std::string& nomeClasse, const std
     }
     return nullptr;
 }
+void Interpreter:: verificaCelula(MemberAccessExprNode* node) {
+    node->objeto->accept(this);
+    if(std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+        auto obj = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+        if(!obj) {
+            throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
+        }
+        auto valor_ret = std::get<std::shared_ptr<ObjectValue>>(obj->valor);
+        m_ultimoValorExpr = valor_ret;    
+    } else if(std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+        auto valor_ret = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+    } else {
+        throw RuntimeException("Tentativa de dereferenciacao de uma variavel simples");
+    }
+
+}
 //Acessa membros de objetos (. e ->)
 void Interpreter::visit(MemberAccessExprNode* node) {
-    node->objeto->accept(this);
-
+    if(node->isArrow) {
+        this->verificaCelula(node);
+    } else {
+        node->objeto->accept(this);
+    }
     if(std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
         auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
         if(!obj) {
@@ -387,9 +422,14 @@ std::shared_ptr<ObjectValue> Interpreter::criarInstanciaObjeto(const std::string
     auto it = m_classes.find(nomeClasse);
     if(it != m_classes.end()) {
         for(const auto& campo : it->second->campos) {
+            if(campo.tipo.pointerLevel > 0) {
+                std::shared_ptr<Celula> cel_temp {};
+                obj->campos[campo.nome] = cel_temp;
+            } else {
             switch(campo.tipo.kind) {
                 case DataTypeKind::Int:
                     obj->campos[campo.nome] = 0;
+                    
                     break;
                 case DataTypeKind::Double:
                     obj->campos[campo.nome] = 0.0;
@@ -401,12 +441,14 @@ std::shared_ptr<ObjectValue> Interpreter::criarInstanciaObjeto(const std::string
                     obj->campos[campo.nome] = '\0';
                     break;
                 case DataTypeKind::Class:
-                    obj->campos[campo.nome] = criarInstanciaObjeto(campo.tipo.name);
+                        obj->campos[campo.nome] = criarInstanciaObjeto(campo.tipo.name);
                     break;
                 default:
                     obj->campos[campo.nome] = 0;
                     break;
+            }              
             }
+
         }
     }
     return obj;
@@ -414,24 +456,29 @@ std::shared_ptr<ObjectValue> Interpreter::criarInstanciaObjeto(const std::string
 
 //Declaração de variáveis com inicializador opcional
 void Interpreter::visit(VariableDeclStmtNode* node) {
-    for(const auto& decl : node->declaradores) {
-        Value val = 0;
+        for(const auto& decl : node->declaradores) {
+            Value val;
+            if(node->tipoBasico.pointerLevel > 0) {
+                std::shared_ptr<Celula> cel_var {};
+                val = cel_var;
+            } else {
+                if(node->tipoBasico.kind == DataTypeKind::Bool) val = false;
+                else if(node->tipoBasico.kind == DataTypeKind::Double) val = 0.0;
+                else if(node->tipoBasico.kind == DataTypeKind::Char) val = '\0';
+                else if(node->tipoBasico.kind == DataTypeKind::Class) {
+                    val = criarInstanciaObjeto(node->tipoBasico.name);
+                }
+            }
+            if(decl.inicializador) {
+                decl.inicializador->accept(this);
+                val = m_ultimoValorExpr;
+            }
 
-        if(node->tipoBasico.kind == DataTypeKind::Bool) val = false;
-        else if(node->tipoBasico.kind == DataTypeKind::Double) val = 0.0;
-        else if(node->tipoBasico.kind == DataTypeKind::Char) val = '\0';
-        else if(node->tipoBasico.kind == DataTypeKind::Class) {
-            val = criarInstanciaObjeto(node->tipoBasico.name);
+            m_env.definir(decl.nome, val);
         }
-
-        if(decl.inicializador) {
-            decl.inicializador->accept(this);
-            val = m_ultimoValorExpr;
-        }
-
-        m_env.definir(decl.nome, val);
-    }
 }
+    
+
 
 //Atualização de variáveis
 void Interpreter::visit(AssignmentStmtNode* node) {
@@ -446,7 +493,12 @@ void Interpreter::visit(AssignmentStmtNode* node) {
     } 
     else if (auto memNode = dynamic_cast<MemberAccessExprNode*>(node->esquerda.get())) {
         //Caso de objeto (Ex: v.x = 10;)
-        memNode->objeto->accept(this);
+        if(memNode->isArrow) {
+            this->verificaCelula(memNode);
+        } else {
+            memNode->objeto->accept(this);
+        }
+
         if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
             auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
             if (!obj) throw RuntimeException("Erro de Execucao: Acesso a membro em ponteiro nulo.");
@@ -511,4 +563,36 @@ void Interpreter::visit(ExpressionStmtNode* node) {
     if(node->expressao) {
         node->expressao->accept(this);
     }
+}
+
+void Interpreter::visit(NewExprNode* node) {
+    size_t i = 0;
+    std::shared_ptr<Celula> cel_var (new Celula());
+    Celula cel_ret;
+    std::shared_ptr<ObjectValue> val_temp = nullptr;
+    auto it = m_classes.find(node->tipo.name);
+
+    if(node->tipo.pointerLevel == 0) {
+        val_temp = criarInstanciaObjeto(node->tipo.name);
+        if(node->parametros.size() == 0) {
+            cel_var->valor = val_temp;
+        } else {
+            for(auto campo_temp : (*it->second).campos) {
+                node->parametros[i]->accept(this);
+                val_temp->campos[campo_temp.nome] = m_ultimoValorExpr;
+                i++;
+            }
+            cel_var->valor = val_temp;
+        } 
+
+    } else {
+        if(node->parametros.size() > 0) {
+            node->parametros[0]->accept(this);
+            cel_var->valor = m_ultimoValorExpr;
+        } else {
+            cel_var->valor = std::shared_ptr<Celula> (nullptr);
+        }
+    }
+    cel_ret.valor = cel_var;
+    m_ultimoValorExpr = cel_ret.valor;
 }
