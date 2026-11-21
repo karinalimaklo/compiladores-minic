@@ -264,7 +264,9 @@ void Interpreter::visit(BinaryExprNode* node) {
             default:
                 throw RuntimeException("Erro de Execucao: Operacao binaria invalida para ponteiros de objeto.");
         }
-}
+    } else{
+        throw RuntimeException("Operação binária inválida!");
+    }
 }
 
 //Avalia negação lógica e sinal negativo
@@ -279,10 +281,10 @@ void Interpreter::visit(UnaryExprNode* node) {
             return;
         }
     } else if(node->op == UnaryOp::Deref) {
-         if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
+        if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
             m_ultimoValorExpr = m_env.obter(idNode->nome, false, true);
             return;
-         }
+        }
     }
 
     //Avaliação padrão dos outros operadores unários
@@ -299,6 +301,13 @@ void Interpreter::visit(UnaryExprNode* node) {
             auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
             if (!obj) {
                 throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
+            }
+        } else if (std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+            auto obj = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+            if (!obj) {
+                throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
+            } else {
+                m_ultimoValorExpr = obj->valor;
             }
         }
     }
@@ -495,7 +504,6 @@ void Interpreter::visit(AssignmentStmtNode* node) {
      //Avalia o lado direito primeiro para descobrir o valor que será guardado
     node->direita->accept(this);
     Value valorDireito = m_ultimoValorExpr;
-
     //Resolve onde gravar com base no tipo do nó da esquerda
     if (auto idNode = dynamic_cast<IdentifierNode*>(node->esquerda.get())) {
         //Caso simples (Ex x = 10;)
@@ -519,6 +527,15 @@ void Interpreter::visit(AssignmentStmtNode* node) {
         //Caso de ponteiro: (Ex: *p = 10;)
         if (unNode->op == UnaryOp::Deref) {
             unNode->fator->accept(this);
+            if(std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+                auto cel_temp = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+                if(!cel_temp) {
+                    throw RuntimeException("Erro de execução: tentativa de atribuição para ponteiro nulo");
+                }
+                cel_temp->valor = valorDireito;
+            } else {
+                throw RuntimeException("Erro de execução: operando de '*' não é um ponteiro");
+            }
             if (auto subId = dynamic_cast<IdentifierNode*>(unNode->fator.get())) {
                 m_env.atribuir(subId->nome, valorDireito, true);
             }
