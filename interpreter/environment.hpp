@@ -22,4 +22,5 @@ class Environment {
         void definir(const std::string& nome, const Value& valor); //declara variável no escopo atual
         void atribuir(const std::string& nome, const Value& value,bool is_ptr=false); //atualiza variável existente
         Value obter(const std::string& nome, bool isaddr = false, bool is_ptr=false) const; //busca valor da variável
+        std::shared_ptr<Celula> resolver(const std::string& nome) const; //retorna a célula real de armazenamento da variável
 };

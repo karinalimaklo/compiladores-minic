@@ -23,9 +23,14 @@ struct Celula;
 using Value = std::variant<int, double, char, bool, std::shared_ptr<ObjectValue>, std::shared_ptr<Celula>>;
 struct Celula {
     Value valor; // se for um ponteiro de nivel 1
+    // Indica se esta celula foi criada por uma expressao new.
+    bool alocadaComNew = false;
+
+    // Indica se a memoria representada por esta celula ja foi liberada.
+    bool liberada = false;
 };
 // Estrutura que representa uma instância de struct ou classe na memória dinamicamente alocada
 struct ObjectValue {
     std::string nomeClasse;
-    std::unordered_map<std::string, Value> campos; //mapeia nome do atributo -> valor atual
+    std::unordered_map<std::string, std::shared_ptr<Celula>> campos; // Cada campo possui sua própria célula de memória
 };

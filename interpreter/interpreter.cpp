@@ -269,22 +269,117 @@ void Interpreter::visit(BinaryExprNode* node) {
     }
 }
 
+// Resolve um LValue e retorna o endereço do Value que deverá ser modificado.
+std::shared_ptr<Celula> Interpreter::resolverLValue(ExpressionNode* node) {
+    if (!node) {
+        throw RuntimeException("Erro de Execucao: expressao nula ao resolver LValue.");
+    }
+    // Caso 1: identificador simples (Ex: x)
+    if (auto idNode = dynamic_cast<IdentifierNode*>(node)) {
+        return m_env.resolver(idNode->nome);
+    }
+
+    // Caso 2: acesso a campo (objeto.campo ou ponteiro->campo)
+    if (auto memNode = dynamic_cast<MemberAccessExprNode*>(node)) {
+        memNode->objeto->accept(this);
+
+        std::shared_ptr<ObjectValue> obj;
+
+        if (memNode->isArrow) {
+            // O operador -> aceita um ponteiro para objeto e ObjectValue diretamente, como acontece com this.
+            if (std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+
+                auto celula = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+
+                if (!celula) {
+                    throw RuntimeException("Erro de Execucao: acesso por ponteiro nulo.");
+                }
+                if (celula->liberada) {
+                    throw RuntimeException("Erro de Execucao: tentativa de acessar memoria ja desalocada.");
+                }
+                if (!std::holds_alternative<std::shared_ptr<ObjectValue>>(celula->valor)) {
+                    throw RuntimeException("Erro de Execucao: ponteiro nao aponta para objeto.");
+                }
+
+                obj = std::get<std::shared_ptr<ObjectValue>>(celula->valor);
+
+            } else if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+
+                obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+
+            } else {
+                throw RuntimeException("Erro de Execucao: operador '->' exige um ponteiro.");
+            }
+
+        } else {
+            // O operador . exige um objeto
+            if (!std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+                throw RuntimeException("Erro de Execucao: acesso a campo exige um objeto.");
+            }
+
+            obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+        }
+
+        if (!obj) {
+            throw RuntimeException("Erro de Execucao: acesso a objeto nulo.");
+        }
+
+        auto campo = obj->campos.find(memNode->nomeMembro);
+
+        if (campo == obj->campos.end()) {
+            throw RuntimeException("Erro de Execucao: campo '" + memNode->nomeMembro + "' nao encontrado.");
+        }
+
+        return campo->second;
+    }
+
+    // Caso 3: desreferenciação (*p)
+    if (auto unNode = dynamic_cast<UnaryExprNode*>(node)) {
+        if (unNode->op == UnaryOp::Deref) {
+            unNode->fator->accept(this);
+
+            if (!std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+                throw RuntimeException("Erro de Execucao: operando de '*' nao e um ponteiro.");
+            }
+
+            auto celula = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+
+            if (!celula) {
+                throw RuntimeException("Erro de Execucao: tentativa de acessar ponteiro nulo.");
+            }
+
+            if (celula->liberada) {
+                throw RuntimeException("Erro de Execucao: tentativa de acessar memoria ja desalocada.");
+            }
+
+            return celula;
+        }
+    }
+
+    throw RuntimeException("Erro de Execucao: expressao nao representa um LValue valido.");
+}
+
 //Avalia negação lógica e sinal negativo
 void Interpreter::visit(UnaryExprNode* node) {
-    node->fator->accept(this);
     //Trata o operador de endereço '&' antes de avaliar o fator para não buscar o valor
     if (node->op == UnaryOp::AddressOf) {
-        if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
-            //Em um interpretador baseado em árvore puro, simular o endereço físico de variáveis 
-            //locais é feito obtendo o valor atual da variável e propagando-o.
-            m_ultimoValorExpr = m_env.obter(idNode->nome, true);
-            return;
-        }
+        auto celula = resolverLValue(node->fator.get());
+        m_ultimoValorExpr = celula;
+        return;
     } else if(node->op == UnaryOp::Deref) {
-        if (auto idNode = dynamic_cast<IdentifierNode*>(node->fator.get())) {
-            m_ultimoValorExpr = m_env.obter(idNode->nome, false, true);
-            return;
+        node->fator->accept(this);
+        if (!std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
+            throw RuntimeException("Erro de Execucao: operando de '*' nao e um ponteiro.");
         }
+        auto celula = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
+        if (!celula) {
+            throw RuntimeException("Erro de Execucao: desreferenciacao de ponteiro nulo.");
+        }
+        if (celula->liberada) {
+            throw RuntimeException("Erro de Execucao: tentativa de acessar memoria ja desalocada.");
+        }
+        m_ultimoValorExpr = celula->valor;
+        return;
     }
 
     //Avaliação padrão dos outros operadores unários
@@ -296,21 +391,7 @@ void Interpreter::visit(UnaryExprNode* node) {
         m_ultimoValorExpr = -std::get<int>(m_ultimoValorExpr);
     } else if(node->op == UnaryOp::Negate && std::holds_alternative<double>(m_ultimoValorExpr)) {
         m_ultimoValorExpr = -std::get<double>(m_ultimoValorExpr);
-    } else if(node->op == UnaryOp::Deref) {
-        if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
-            auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
-            if (!obj) {
-                throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
-            }
-        } else if (std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
-            auto obj = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
-            if (!obj) {
-                throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
-            } else {
-                m_ultimoValorExpr = obj->valor;
-            }
-        }
-    }
+    } 
 }
 
 //Modifica com ++ ou --
@@ -371,51 +452,76 @@ void Interpreter:: verificaCelula(MemberAccessExprNode* node) {
         if(!obj) {
             throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
         }
-        auto valor_ret = std::get<std::shared_ptr<ObjectValue>>(obj->valor);
-        m_ultimoValorExpr = valor_ret;    
-    } else if(std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
-        auto valor_ret = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
-    } else {
-        throw RuntimeException("Tentativa de dereferenciacao de uma variavel simples");
-    }
-
+        if (obj->liberada) {
+            throw RuntimeException("Erro de Execucao: tentativa de acessar memoria ja desalocada.");
+        }
+        if (!std::holds_alternative<std::shared_ptr<ObjectValue>>(obj->valor)) {
+            throw RuntimeException("Erro de Execucao: ponteiro nao aponta para objeto.");
+        }
+        m_ultimoValorExpr = obj->valor;    
+    } else if(!std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+        throw RuntimeException("Erro de Execucao: acesso com '->' exige um objeto ou ponteiro.");
+    } 
 }
 //Acessa membros de objetos (. e ->)
 void Interpreter::visit(MemberAccessExprNode* node) {
+    std::shared_ptr<ObjectValue> obj;
     if(node->isArrow) {
-        this->verificaCelula(node);
+        verificaCelula(node);
     } else {
         node->objeto->accept(this);
     }
-    if(std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
-        auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
-        if(!obj) {
-            throw RuntimeException("Erro de Execucao: Desreferenciacao de ponteiro nulo.");
-        }
-        if(obj->campos.find(node->nomeMembro) != obj->campos.end()) {
-            m_ultimoValorExpr = obj->campos[node->nomeMembro];
-        } else {
-            FunctionNode* func = buscarMetodo(obj->nomeClasse, node->nomeMembro);
-            if(func == nullptr) {
-                throw RuntimeException("Erro de Execucao: metodo nao declarada: " + obj->nomeClasse);
-            } else {
-                std::vector<Value> valoresArgs;
-                
-                //Avalia os argumentos antes de mudar de escopo
-                for(auto& arg : node->metodo->argumentos) {
-                    arg->accept(this);
-                    valoresArgs.push_back(m_ultimoValorExpr);
-                }
+    if (!std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
+        throw RuntimeException("Erro de Execucao: acesso a membro exige um objeto.");
+    }
 
-                m_env.entrarEscopo();
-                m_env.definir("this", obj);
-                for(size_t i = 0; i < func->parametros.size(); ++i) {
-                    m_env.definir(func->parametros[i].nome, valoresArgs[i]);
-                }
-                func->accept(this);
-                m_env.sairEscopo();
-            }
+    obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
+
+    if (!obj) {
+        throw RuntimeException("Erro de Execucao: acesso a objeto nulo.");
+    }
+
+    auto campo = obj->campos.find(node->nomeMembro);
+
+    if (campo != obj->campos.end()) {
+        if (!campo->second) {
+            throw RuntimeException("Erro de Execucao: campo sem celula de armazenamento.");
         }
+        m_ultimoValorExpr = campo->second->valor;
+        return;
+    }
+
+    // Se não encontrou um campo, procura um método
+    FunctionNode* func = buscarMetodo(obj->nomeClasse, node->nomeMembro);
+
+    if (func == nullptr) {
+        throw RuntimeException("Erro de Execucao: metodo nao declarado: " + node->nomeMembro);
+    }
+
+    std::vector<Value> valoresArgs;
+
+    if (node->metodo) {
+        for (auto& arg : node->metodo->argumentos) {
+            arg->accept(this);
+            valoresArgs.push_back(m_ultimoValorExpr);
+        }
+    }
+
+    m_env.entrarEscopo();
+
+    try {
+        m_env.definir("this", obj);
+
+        for (size_t i = 0; i < func->parametros.size(); ++i) {
+            m_env.definir(func->parametros[i].nome, valoresArgs[i]);
+        }
+
+        func->accept(this);
+        m_env.sairEscopo();
+
+    } catch (...) {
+        m_env.sairEscopo();
+        throw;
     }
 }
 
@@ -441,33 +547,32 @@ std::shared_ptr<ObjectValue> Interpreter::criarInstanciaObjeto(const std::string
     auto it = m_classes.find(nomeClasse);
     if(it != m_classes.end()) {
         for(const auto& campo : it->second->campos) {
+            Value valor;
             if(campo.tipo.pointerLevel > 0) {
-                std::shared_ptr<Celula> cel_temp {};
-                obj->campos[campo.nome] = cel_temp;
+                valor = std::shared_ptr<Celula>{};
             } else {
             switch(campo.tipo.kind) {
                 case DataTypeKind::Int:
-                    obj->campos[campo.nome] = 0;
-                    
+                    valor = 0;
                     break;
                 case DataTypeKind::Double:
-                    obj->campos[campo.nome] = 0.0;
+                    valor = 0.0;
                     break;
                 case DataTypeKind::Bool:
-                    obj->campos[campo.nome] = false;
+                    valor = false;
                     break;
                 case DataTypeKind::Char:
-                    obj->campos[campo.nome] = '\0';
+                    valor = '\0';
                     break;
                 case DataTypeKind::Class:
-                        obj->campos[campo.nome] = criarInstanciaObjeto(campo.tipo.name);
+                    valor = criarInstanciaObjeto(campo.tipo.name);
                     break;
                 default:
-                    obj->campos[campo.nome] = 0;
+                    valor = 0;
                     break;
             }              
             }
-
+            obj->campos[campo.nome] = std::make_shared<Celula>(Celula{valor});
         }
     }
     return obj;
@@ -497,50 +602,23 @@ void Interpreter::visit(VariableDeclStmtNode* node) {
         }
 }
     
-
-
-//Atualização de variáveis
+//Atualização de variáveis e atributos
 void Interpreter::visit(AssignmentStmtNode* node) {
-     //Avalia o lado direito primeiro para descobrir o valor que será guardado
-    node->direita->accept(this);
-    Value valorDireito = m_ultimoValorExpr;
-    //Resolve onde gravar com base no tipo do nó da esquerda
-    if (auto idNode = dynamic_cast<IdentifierNode*>(node->esquerda.get())) {
-        //Caso simples (Ex x = 10;)
-        m_env.atribuir(idNode->nome, valorDireito);
-    } 
-    else if (auto memNode = dynamic_cast<MemberAccessExprNode*>(node->esquerda.get())) {
-        //Caso de objeto (Ex: v.x = 10;)
-        if(memNode->isArrow) {
-            this->verificaCelula(memNode);
-        } else {
-            memNode->objeto->accept(this);
-        }
 
-        if (std::holds_alternative<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr)) {
-            auto obj = std::get<std::shared_ptr<ObjectValue>>(m_ultimoValorExpr);
-            if (!obj) throw RuntimeException("Erro de Execucao: Acesso a membro em ponteiro nulo.");
-            obj->campos[memNode->nomeMembro] = valorDireito;
-        }
+    //Avalia primeiro o lado direito
+    node->direita->accept(this);
+
+    //Guarda o valor calculado
+    Value valorDireito = m_ultimoValorExpr;
+
+    // Obtém a célula real do lado esquerdo.
+    auto destino = resolverLValue(node->esquerda.get());
+
+    if (!destino) {
+        throw RuntimeException("Erro de Execucao: destino de atribuicao invalido.");
     }
-    else if (auto unNode = dynamic_cast<UnaryExprNode*>(node->esquerda.get())) {
-        //Caso de ponteiro: (Ex: *p = 10;)
-        if (unNode->op == UnaryOp::Deref) {
-            unNode->fator->accept(this);
-            if(std::holds_alternative<std::shared_ptr<Celula>>(m_ultimoValorExpr)) {
-                auto cel_temp = std::get<std::shared_ptr<Celula>>(m_ultimoValorExpr);
-                if(!cel_temp) {
-                    throw RuntimeException("Erro de execução: tentativa de atribuição para ponteiro nulo");
-                }
-                cel_temp->valor = valorDireito;
-            } else {
-                throw RuntimeException("Erro de execução: operando de '*' não é um ponteiro");
-            }
-            if (auto subId = dynamic_cast<IdentifierNode*>(unNode->fator.get())) {
-                m_env.atribuir(subId->nome, valorDireito, true);
-            }
-        }
-    }
+    // Atualiza o conteúdo da célula
+    destino->valor = valorDireito;
 }
 
 //Estrutura condicional if/else
@@ -593,33 +671,108 @@ void Interpreter::visit(ExpressionStmtNode* node) {
 }
 
 void Interpreter::visit(NewExprNode* node) {
-    size_t i = 0;
-    std::shared_ptr<Celula> cel_var (new Celula());
-    Celula cel_ret;
+    auto cel_var = std::make_shared<Celula>();
     std::shared_ptr<ObjectValue> val_temp = nullptr;
     auto it = m_classes.find(node->tipo.name);
 
-    if(node->tipo.pointerLevel == 0) {
+    if (node->tipo.pointerLevel == 0) {
         val_temp = criarInstanciaObjeto(node->tipo.name);
-        if(node->parametros.size() == 0) {
-            cel_var->valor = val_temp;
-        } else {
-            for(auto campo_temp : (*it->second).campos) {
-                node->parametros[i]->accept(this);
-                val_temp->campos[campo_temp.nome] = m_ultimoValorExpr;
-                i++;
+
+        if (!node->parametros.empty()) {
+            if (it == m_classes.end()) {
+                throw RuntimeException("Erro de Execucao: classe nao encontrada.");
             }
-            cel_var->valor = val_temp;
-        } 
+
+            if (node->parametros.size() != it->second->campos.size()) {
+                throw RuntimeException("Erro de Execucao: quantidade de inicializadores invalida.");
+            }
+
+            size_t i = 0;
+
+            for (const auto& campo : it->second->campos) {
+                node->parametros[i]->accept(this);
+                auto campoObj = val_temp->campos.find(campo.nome);
+
+                if (campoObj == val_temp->campos.end() || !campoObj->second) {
+                    throw RuntimeException("Erro de Execucao: campo sem armazenamento.");
+                }
+
+                campoObj->second->valor = m_ultimoValorExpr;
+                ++i;
+            }
+        }
+
+        cel_var->valor = val_temp;
 
     } else {
-        if(node->parametros.size() > 0) {
+        if (!node->parametros.empty()) {
             node->parametros[0]->accept(this);
             cel_var->valor = m_ultimoValorExpr;
         } else {
-            cel_var->valor = std::shared_ptr<Celula> (nullptr);
+            cel_var->valor = std::shared_ptr<Celula>{};
         }
     }
-    cel_ret.valor = cel_var;
-    m_ultimoValorExpr = cel_ret.valor;
+
+    cel_var->alocadaComNew = true; //Esta celula representa uma alocacao feita com new
+    m_ultimoValorExpr = cel_var;
+}
+
+void Interpreter::visit(DeleteStmtNode* node) {
+
+    if (!node || !node->expressao) {
+        throw RuntimeException("Erro de Execucao: expressao invalida no comando 'delete'.");
+    }
+
+    //Caso especial: delete nullptr; nao precisa fazer nada.
+    if (auto literal = dynamic_cast<LiteralNode*>(node->expressao.get())) {
+
+        if (literal->valor == "nullptr") {
+            return;
+        }
+    }
+
+    //Localiza a celula que armazena o ponteiro.
+    std::shared_ptr<Celula> celulaPonteiro =
+        resolverLValue(node->expressao.get());
+
+    if (!celulaPonteiro) {
+        throw RuntimeException("Erro de Execucao: ponteiro invalido no comando 'delete'.");
+    }
+
+    //O valor armazenado precisa ser um ponteiro.
+    if (!std::holds_alternative<std::shared_ptr<Celula>>(celulaPonteiro->valor)) {
+        throw RuntimeException("Erro de Execucao: o operando de 'delete' nao e um ponteiro.");
+    }
+
+    std::shared_ptr<Celula> alvo = std::get<std::shared_ptr<Celula>>(celulaPonteiro->valor);
+
+    //Delete de um ponteiro nulo é uma operacao segura
+    if (!alvo) {
+        return;
+    }
+
+    //Impede liberar uma variavel ou atributo que nao veio de new
+    if (!alvo->alocadaComNew) {
+        throw RuntimeException("Erro de Execucao: tentativa de liberar memoria que nao foi alocada com 'new'.");
+    }
+
+    //Impede uma segunda liberacao por meio de outro ponteiro que seja alias
+    if (alvo->liberada) {
+        throw RuntimeException("Erro de Execucao: tentativa de liberar memoria que ja foi desalocada.");
+    }
+
+    //Marca a celula como liberada
+    alvo->liberada = true;
+
+    //Limpa o objeto ou ponteiro armazenado na celula liberada.
+    if (std::holds_alternative<std::shared_ptr<ObjectValue>>(alvo->valor)) {
+        alvo->valor = std::shared_ptr<ObjectValue>{};
+    } else if (std::holds_alternative<std::shared_ptr<Celula>>(alvo->valor)) {
+        alvo->valor = std::shared_ptr<Celula>{};
+    } else {
+        throw RuntimeException("Erro de Execucao: conteudo invalido na memoria alocada.");
+    }
+
+    //O ponteiro utilizado no delete passa a ser nullptr
+    celulaPonteiro->valor = std::shared_ptr<Celula>{};
 }

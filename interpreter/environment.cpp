@@ -66,3 +66,16 @@ Value Environment::obter(const std::string& nome, bool isaddr, bool is_ptr) cons
     }
     throw RuntimeException("Erro de Execucao: Variavel '" + nome + "' nao foi encontrada na memoria.");
 }
+
+// Permite modificar diretamente o valor sem precisar criar diferentes operações para cada tipo de LValue.
+std::shared_ptr<Celula> Environment::resolver(const std::string& nome) const {
+    for (auto it = m_escopos.rbegin(); it != m_escopos.rend(); ++it) {
+
+        auto enc = it->find(nome);
+        if (enc != it->end()) {
+            return enc->second;
+        }
+    }
+
+    throw RuntimeException("Erro de Execucao: Variavel '" + nome + "' nao foi encontrada na memoria.");
+}

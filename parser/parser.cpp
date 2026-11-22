@@ -326,7 +326,8 @@ std::unique_ptr<StatementNode> Parser::parseComando() {
     if (checar(TipoToken::PalContinue)) return parseComandoContinue();
     if (checar(TipoToken::PalRet))      return parseComandoReturn();
     if (checar(TipoToken::ChavesEsq))   return parseBloco();
-
+    if (checar(TipoToken::PalDelete)) return parseComandoDelete();
+    
     //Se não cair em nenhuma das opções acima, restam duas possibilidades da gramática:
     //Uma atribuição (id = expr;) ou uma expressão pura terminada em ';' (ex: id++; ou chamadas de função)
     return parseAtribuicaoOuExpressaoStmt();
@@ -467,6 +468,16 @@ std::unique_ptr<ExpressionNode> Parser::parseTermo() {
         expr = std::make_unique<BinaryExprNode>(op, std::move(expr), std::move(direita));
     }
     return expr;
+}
+
+std::unique_ptr<StatementNode> Parser::parseComandoDelete() {
+    consumir(TipoToken::PalDelete, "Erro Sintatico: Esperado 'delete'.");
+
+    std::unique_ptr<ExpressionNode> expressao = parseExpressao();
+
+    consumir(TipoToken::PontoVirg, "Erro Sintatico: Esperado ';' apos o comando 'delete'.");
+
+    return std::make_unique<DeleteStmtNode>(std::move(expressao));
 }
 
 // Processa fatores atômicos e cadeias de acesso: fator ::= fator_nucleo (op_acesso identificador)*

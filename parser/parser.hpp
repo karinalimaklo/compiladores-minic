@@ -72,6 +72,7 @@ private:
     std::unique_ptr<StatementNode> parseComandoBreak();
     std::unique_ptr<StatementNode> parseComandoContinue();
     std::unique_ptr<StatementNode> parseComandoReturn();
+    std::unique_ptr<StatementNode> parseComandoDelete();
 
     //Expressões (Hierarquia de Precedência - Da menor para a maior)
     std::unique_ptr<ExpressionNode> parseExpressao();

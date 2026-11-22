@@ -51,8 +51,10 @@ class Interpreter : public ASTVisitor {
         void visit(ReturnStmtNode* node) override;
         void visit(ExpressionStmtNode* node) override;
         void visit(NewExprNode* node) override;
+        void visit(DeleteStmtNode* node) override;
 
     private:
+        std::shared_ptr<Celula> resolverLValue(ExpressionNode* node);
         //cria uma nova instância de struct/class preenchendo os atributos com valores padrão
         std::shared_ptr<ObjectValue> criarInstanciaObjeto(const std::string& nomeClasse);
 

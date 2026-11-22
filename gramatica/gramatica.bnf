@@ -118,6 +118,8 @@ comando_continue ::= "continue" ";" ;
 
 comando_return ::= "return" expressao? ";" ;
 
+comando_delete ::= "delete" expressao ";";
+
 bloco ::= "{" comando* "}" ;
 
 comando ::= declaracao_variavel
@@ -127,6 +129,7 @@ comando ::= declaracao_variavel
           | comando_break
           | comando_continue
           | comando_return
+          | comando_delete
           | bloco
           | expressao ";" ;
 

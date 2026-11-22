@@ -697,3 +697,37 @@ void TypeChecker::visit(NewExprNode* node) {
     m_tipoExprAtual = DataType{node->tipo.kind, node->tipo.name, (node->tipo.pointerLevel)+1 };
 
 }
+
+void TypeChecker::visit(DeleteStmtNode* node) {
+
+    if (!node || !node->expressao) {
+        throw std::runtime_error("Erro Semantico: Expressao invalida no comando 'delete'.");
+    }
+
+    //Caso especial: delete nullptr; e permitido.
+    if (auto literal = dynamic_cast<LiteralNode*>(node->expressao.get())) {
+        if (literal->valor == "nullptr" && literal->tipoLiteral.kind == DataTypeKind::Void && literal->tipoLiteral.pointerLevel == 1) {
+            return;
+        }
+    }
+
+    //O operando precisa representar uma variavel ou local modificavel.
+    if (!node->expressao->isLValue) {
+        throw std::runtime_error("Erro Semantico: O comando 'delete' exige um LValue.");
+    }
+
+    //Descobre o tipo da expressao
+    node->expressao->accept(this);
+
+    DataType tipo = m_tipoExprAtual;
+
+    // O operando precisa ser um ponteiro
+    if (tipo.pointerLevel <= 0) {
+        throw std::runtime_error("Erro Semantico: O comando 'delete' exige um ponteiro.");
+    }
+
+    // Nao permitimos desalocacao de ponteiros void
+    if (tipo.kind == DataTypeKind::Void) {
+        throw std::runtime_error("Erro Semantico: Nao e permitido utilizar 'delete' em um ponteiro void.");
+    }
+}

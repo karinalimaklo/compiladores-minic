@@ -70,4 +70,5 @@ public:
     void visit(ReturnStmtNode* node) override;
     void visit(ExpressionStmtNode* node) override;
     void visit(NewExprNode* node) override;
+    void visit(DeleteStmtNode* node) override;
 };
